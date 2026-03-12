@@ -1,0 +1,10 @@
+bentoml==1.4.33
+vllm==0.13.0
+huggingface-hub
+lmcache
+kantoku
+pyyaml
+fastapi
+kernels
+mistral_common[opencv]
+bento-sgl-router>=0.0.6
