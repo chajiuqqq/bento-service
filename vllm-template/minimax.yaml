@@ -1,0 +1,8 @@
+name : "MiniMax2.5"
+model_id: MiniMax-M2.5
+local_model_path: /models
+gpu_type: nvidia-l4
+tp: 2
+max_model_len: 8192
+tool-parser: minimax_m2
+reasoning-parser: minimax_m2_append_think
