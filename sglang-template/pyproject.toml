@@ -1,0 +1,14 @@
+[project]
+name = "bentosglang"
+version = "0.1.0"
+description = "Self-host LLMs with SGLang and BentoML"
+requires-python = ">=3.11"
+
+[tool.bentoml.build]
+service = "service.py:SGL"
+include = [
+  "*.py",
+  "*.toml",
+  "*.txt",
+  "*.yaml",
+]

@@ -1,0 +1,20 @@
+name: local-sglang-model
+model_id: local-sglang-model
+local_model_path: /models
+gpu_type: nvidia-h100-80gb
+tp: 4
+port: 8000
+host: 0.0.0.0
+max_session_len: 32768
+max_tokens: 16384
+mem_fraction_static: 0.85
+reasoning_parser: qwen3
+tool_parser: qwen25
+trust_remote_code: true
+envs:
+  - name: UV_INDEX_STRATEGY
+    value: unsafe-best-match
+metadata:
+  description: Local model served by SGLang
+  provider: Custom
+  gpu_recommendation: An NVIDIA GPU sized for the selected model

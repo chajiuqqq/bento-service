@@ -1,136 +1,186 @@
+from __future__ import annotations
+
+import json
+import logging
 import os
-import typing as t
-from typing import AsyncGenerator, Optional
+import typing
 
 import bentoml
-from annotated_types import Ge, Le
-from typing_extensions import Annotated
+import httpx
+import pydantic
 
-import fastapi
-openai_api_app = fastapi.FastAPI()
+logger = logging.getLogger(__name__)
 
-MAX_SESSION_LEN = int(os.environ.get("MAX_SESSION_LEN", 32*1024))
-MAX_TOKENS = int(os.environ.get("MAX_TOKENS", 16*1024))
-NUM_GPUS = int(os.environ.get("NUM_GPUS", 4))
+if typing.TYPE_CHECKING:
+  Jsonable = list[str] | list[dict[str, str]] | None
+else:
+  Jsonable = typing.Any
 
-SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 
-If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""
+class BentoArgs(pydantic.BaseModel):
+  tp: int = 4
+  dp: int | None = None
+  port: int = 8000
+  host: str = '0.0.0.0'
+  mem_fraction_static: float = 0.85
+  max_session_len: int = 32 * 1024
+  max_tokens: int = 16 * 1024
+  reasoning_parser: str | None = 'qwen3'
+  tool_parser: str | None = 'qwen25'
+  trust_remote_code: bool = False
 
-MODEL_ID = "Qwen/Qwen3-235B-A22B-FP8"
+  name: str = 'bentosglang-service'
+  gpu_type: str = 'nvidia-h100-80gb'
+  model_id: str = 'Qwen/Qwen3-235B-A22B-FP8'
+  local_model_path: str | None = None
 
-sys_pkg_cmd = "apt-get -y update && apt-get -y install libopenmpi-dev git python3-pip"
-runtime_image = bentoml.images.Image(
-    base_image="docker.io/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04",
-    lock_python_packages=False,
-).run(sys_pkg_cmd).requirements_file("requirements.txt")
+  post: list[str] = pydantic.Field(default_factory=list)
+  cli_args: list[str] = pydantic.Field(default_factory=list)
+  envs: list[dict[str, str]] = pydantic.Field(default_factory=list)
+  exclude: list[str] = pydantic.Field(default_factory=lambda: ['*.pth', '*.pt', 'original/**/*'])
+  metadata: dict[str, typing.Any] = pydantic.Field(
+    default_factory=lambda: {
+      'description': 'SGLang OpenAI-compatible service',
+      'provider': 'Custom',
+      'gpu_recommendation': 'An NVIDIA GPU sized for the selected model.',
+    }
+  )
 
-@bentoml.asgi_app(openai_api_app, path="/v1")
+  @pydantic.field_validator('exclude', 'cli_args', 'post', 'envs', 'metadata', mode='before')
+  @classmethod
+  def _coerce_json_or_csv(cls, value: typing.Any) -> Jsonable:
+    if value is None or isinstance(value, (list, dict)):
+      return typing.cast(Jsonable, value)
+    if isinstance(value, str):
+      try:
+        return typing.cast(Jsonable, json.loads(value))
+      except json.JSONDecodeError:
+        return [item.strip() for item in value.split(',') if item.strip()]
+    return typing.cast(Jsonable, value)
+
+  @property
+  def additional_cli_args(self) -> list[str]:
+    import torch
+
+    auto_tp_device = str(os.environ.get('TP_AUTO_ALLOCATE', True)).lower() in {'1', 'true', 'yes', 'y'}
+    if auto_tp_device:
+      tp_rank = torch.cuda.device_count()
+    else:
+      tp_rank = self.tp
+
+    default = [
+      '--host',
+      self.host,
+      '--port',
+      str(self.port),
+      '--tp',
+      str(tp_rank),
+      '--context-length',
+      str(self.max_session_len),
+      '--mem-fraction-static',
+      str(self.mem_fraction_static),
+      '--served-model-name',
+      self.served_model_name,
+      *self.cli_args,
+    ]
+    if self.dp:
+      default.extend(['--dp', str(self.dp)])
+    if self.tool_parser:
+      default.extend(['--tool-call-parser', self.tool_parser])
+    if self.reasoning_parser:
+      default.extend(['--reasoning-parser', self.reasoning_parser])
+    if self.trust_remote_code or self.local_model_path:
+      default.append('--trust-remote-code')
+    return default
+
+  @property
+  def additional_labels(self) -> dict[str, str]:
+    return {
+      'reasoning': '1' if self.reasoning_parser else '0',
+      'tool': self.tool_parser or '',
+      'openai_model': self.served_model_name,
+    }
+
+  @property
+  def model_source(self) -> str | bentoml.models.HuggingFaceModel:
+    if self.local_model_path:
+      return os.path.abspath(os.path.expanduser(self.local_model_path))
+    return bentoml.models.HuggingFaceModel(self.model_id, exclude=self.exclude)
+
+  @property
+  def served_model_name(self) -> str:
+    if self.local_model_path and self.model_id == BentoArgs.model_fields['model_id'].default:
+      return os.path.basename(os.path.abspath(os.path.expanduser(self.local_model_path.rstrip('/'))))
+    return self.model_id
+
+  @property
+  def runtime_envs(self) -> list[dict[str, str]]:
+    envs = [*self.envs]
+    envs.extend([
+      {'name': 'MAX_SESSION_LEN', 'value': str(self.max_session_len)},
+      {'name': 'MAX_TOKENS', 'value': str(self.max_tokens)},
+      {'name': 'NUM_GPUS', 'value': str(self.tp)},
+      {'name': 'UV_INDEX_STRATEGY', 'value': 'unsafe-best-match'},
+      {'name': 'UV_NO_PROGRESS', 'value': '1'},
+    ])
+    return envs
+
+  @property
+  def image(self) -> bentoml.images.Image:
+    image = (
+      bentoml.images.Image(
+        python_version='3.12',
+        base_image='docker.io/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04',
+        lock_python_packages=False,
+      )
+      .system_packages('git', 'python3', 'python3-pip', 'libopenmpi-dev')
+      .run('ln -sf /usr/bin/pip3 /usr/local/bin/pip')
+      .requirements_file('requirements.txt')
+    )
+    if self.post:
+      for cmd in self.post:
+        image = image.run(cmd)
+    return image
+
+
+bento_args = bentoml.use_arguments(BentoArgs)
+
+
 @bentoml.service(
-    name="bentosglang-qwen3-235b-a22b-fp8-service",
-    image=runtime_image,
-    envs=[
-        {"name": "MAX_SESSION_LEN", "value": f"{32*1024}"},
-        {"name": "MAX_TOKENS", "value": f"{16*1024}"},
-        {"name": "NUM_GPUS", "value": str(NUM_GPUS)},
-        {"name": "UV_INDEX_STRATEGY", "value": "unsafe-best-match"},
-    ],
-    traffic={
-        "timeout": 150,
-        "concurrency": 10,
-    },
-    resources={
-        "gpu": NUM_GPUS,
-        "gpu_type": "nvidia-h100-80gb",
-    },
+  name=bento_args.name,
+  envs=bento_args.runtime_envs,
+  image=bento_args.image,
+  labels={
+    'owner': 'bentoml-team',
+    'type': 'prebuilt',
+    'project': 'bentosglang',
+    'openai_endpoint': '/v1',
+    **bento_args.additional_labels,
+  },
+  traffic={'timeout': 300},
+  endpoints={'readyz': '/health'},
+  resources={'gpu': bento_args.tp, 'gpu_type': bento_args.gpu_type},
 )
 class SGL:
+  hf = bento_args.model_source
 
-    hf_model = bentoml.models.HuggingFaceModel(
-        MODEL_ID,
-        exclude=['*.pth', '*.pt', 'original/**/*'],
-    )
+  def __command__(self) -> list[str]:
+    return [
+      'python3',
+      '-m',
+      'sglang.launch_server',
+      '--model-path',
+      self.hf,
+      *bento_args.additional_cli_args,
+    ]
 
-    def __init__(self) -> None:
-        from transformers import AutoTokenizer
-        import sglang as sgl
-        from sglang.srt.server_args import ServerArgs
-
-        server_args = ServerArgs(
-            model_path=self.hf_model,
-            served_model_name=MODEL_ID,
-            tool_call_parser="qwen25",
-            reasoning_parser="qwen3",
-            context_length=MAX_SESSION_LEN,
-            mem_fraction_static=0.85,
-            tp_size=NUM_GPUS,
-        )
-        self.engine = sgl.Engine(
-            server_args=server_args
-        )
-
-        self.tokenizer = AutoTokenizer.from_pretrained(self.hf_model)
-
-        # OpenAI endpoints
-        from fastapi import Request
-        from fastapi.responses import ORJSONResponse
-        from sglang.srt.openai_api.adapter import (
-            v1_chat_completions,
-            v1_completions,
-        )
-        from sglang.srt.openai_api.protocol import ModelCard, ModelList
-
-        @openai_api_app.post("/completions")
-        async def openai_v1_completions(raw_request: Request):
-            return await v1_completions(self.engine.tokenizer_manager, raw_request)
-
-
-        @openai_api_app.post("/chat/completions")
-        async def openai_v1_chat_completions(raw_request: Request):
-            return await v1_chat_completions(self.engine.tokenizer_manager, raw_request)
-
-        @openai_api_app.get("/models", response_class=ORJSONResponse)
-        def available_models():
-            """Show available models."""
-            served_model_names = [self.engine.tokenizer_manager.served_model_name]
-            model_cards = []
-            for served_model_name in served_model_names:
-                model_cards.append(ModelCard(id=served_model_name, root=served_model_name))
-            return ModelList(data=model_cards)
-
-
-    @bentoml.on_shutdown
-    def shutdown(self):
-        self.engine.shutdown()
-
-
-    @bentoml.api
-    async def generate(
-        self,
-        prompt: str = "Explain superconductors in plain English",
-        system_prompt: Optional[str] = SYSTEM_PROMPT,
-        max_tokens: Annotated[int, Ge(128), Le(MAX_TOKENS)] = MAX_TOKENS,
-        sampling_params: Optional[t.Dict[str, t.Any]] = None,
-    ) -> AsyncGenerator[str, None]:
-
-        if sampling_params is None:
-            sampling_params = dict()
-        if system_prompt is None:
-            system_prompt = SYSTEM_PROMPT
-
-        sampling_params["max_new_tokens"] = sampling_params.get("max_new_tokens", max_tokens)
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ]
-        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False)
-        stream = await self.engine.async_generate(
-            prompt, sampling_params=sampling_params, stream=True
-        )
-
-        cursor = 0
-        async for request_output in stream:
-            text = request_output["text"][cursor:]
-            cursor += len(text)
-            yield text
+  async def __metrics__(self, content: str) -> str:
+    client = typing.cast(httpx.AsyncClient, SGL.context.state['client'])
+    try:
+      response = await client.get(f'http://localhost:{bento_args.port}/metrics', timeout=5.0)
+      response.raise_for_status()
+    except (httpx.ConnectError, httpx.RequestError) as exc:
+      logger.error('Failed to get metrics: %s', exc)
+      return content
+    else:
+      return content + '\n' + response.text
