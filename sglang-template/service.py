@@ -83,12 +83,6 @@ class BentoArgs(pydantic.BaseModel):
       self.served_model_name,
       *self.cli_args,
     ]
-    if self.dp:
-      default.extend(['--dp', str(self.dp)])
-    if self.tool_parser:
-      default.extend(['--tool-call-parser', self.tool_parser])
-    if self.reasoning_parser:
-      default.extend(['--reasoning-parser', self.reasoning_parser])
     if self.trust_remote_code or self.local_model_path:
       default.append('--trust-remote-code')
     return default
@@ -135,7 +129,6 @@ class BentoArgs(pydantic.BaseModel):
       )
       .system_packages('git', 'python3', 'python3-pip', 'libopenmpi-dev')
       .run('ln -sf /usr/bin/pip3 /usr/local/bin/pip')
-      .requirements_file('requirements.txt')
     )
     if self.post:
       for cmd in self.post:
