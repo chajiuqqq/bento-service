@@ -153,6 +153,7 @@ bento_args = bentoml.use_arguments(BentoArgs)
   traffic={'timeout': 300},
   endpoints={'readyz': '/health'},
   resources={'gpu': bento_args.tp, 'gpu_type': bento_args.gpu_type},
+  workers=1,
 )
 class SGL:
   hf = bento_args.model_source
