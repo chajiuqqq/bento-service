@@ -155,7 +155,6 @@ bento_args = bentoml.use_arguments(BentoArgs)
   resources={'gpu': bento_args.tp, 'gpu_type': bento_args.gpu_type},
   metrics={
     "enabled": True,
-    "namespace": "bentoml",
   },
   workers=1,
 )
