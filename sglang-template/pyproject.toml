@@ -2,7 +2,11 @@
 name = "bentosglang"
 version = "0.1.0"
 description = "Self-host LLMs with SGLang and BentoML"
-requires-python = ">=3.11"
+requires-python = "==3.12.0"
+dependencies = [
+    "bentoml==1.4.33",
+    "sglang[all] @ git+https://github.com/sgl-project/sglang.git@da1793f63a788fc4e15e1ea80129d4853e6b13fa#subdirectory=python",
+]
 
 [tool.bentoml.build]
 service = "service.py:SGL"
@@ -10,5 +14,6 @@ include = [
   "*.py",
   "*.toml",
   "*.txt",
+  "uv.lock",
   "*.yaml",
 ]
