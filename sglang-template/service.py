@@ -177,8 +177,8 @@ class SGL:
     try:
       response = await client.get(f'http://localhost:{bento_args.port}/metrics', timeout=5.0)
       response.raise_for_status()
-    except (httpx.ConnectError, httpx.RequestError) as exc:
-      logger.error('Failed to get metrics: %s', exc)
+    except httpx.HTTPError as exc:
+      logger.warning('Failed to get SGLang metrics: %s', exc)
       return content
     else:
       return content + '\n' + response.text
