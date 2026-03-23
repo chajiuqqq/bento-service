@@ -3,38 +3,23 @@ model_id: Qwen3.5-397B-A17B-NVFP4
 local_model_path: /models/Qwen3.5-397B-A17B-NVFP4
 gpu_type: nvidia-h100-80gb
 tp: 4
-max_session_len: 8192
-max_tokens: 16384
-mem_fraction_static: 0.85
+max_session_len: 40960
+mem_fraction_static: 0.7
 cli_args:
   - --quantization
   - modelopt_fp4
   - --kv-cache-dtype
   - fp8_e5m2
-  - --reasoning-parser 
-  - qwen3 
-  - --attention-backend 
+  - --reasoning-parser
+  - qwen3
+  - --attention-backend
   - triton
-  - --moe-runner-backend 
-  - flashinfer_cutlass 
-  - --speculative-algorithm 
-  - NEXTN 
-  - --speculative-num-steps
-  - '3'
-  - --speculative-eagle-topk
-  - '1'
-  - --speculative-num-draft-tokens
-  - '4'
-  - --speculative-draft-model-quantization
-  - unquant
-  - --mem-fraction-static
-  - '0.80'
-  - --chunked-prefill-size
-  - '4096'
+  - --moe-runner-backend
+  - flashinfer_cutlass
   - --max-running-requests
-  - '16'
+  - '8'
   - --cuda-graph-max-bs
-  - '16'
+  - '8'
   - --preferred-sampling-params
   - '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}'
-
+  - --disable-custom-all-reduce
