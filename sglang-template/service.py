@@ -3,13 +3,17 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import typing
 
 import bentoml
+import fastapi
 import httpx
 import pydantic
 
 logger = logging.getLogger(__name__)
+openai_api_app = fastapi.FastAPI()
+body_logger = logging.getLogger('openai.body')
 
 if typing.TYPE_CHECKING:
   Jsonable = list[str] | list[dict[str, str]] | None
@@ -17,11 +21,71 @@ else:
   Jsonable = typing.Any
 
 
+def _ensure_body_logger() -> logging.Logger:
+  if body_logger.handlers:
+    return body_logger
+
+  handler = logging.StreamHandler(sys.stdout)
+  handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+  body_logger.setLevel(logging.INFO)
+  body_logger.addHandler(handler)
+  body_logger.propagate = False
+  return body_logger
+
+
+def _decode_bytes(data: bytes) -> str:
+  return data.decode('utf-8', errors='replace')
+
+
+def _format_body_for_log(body: bytes, content_type: str | None) -> str:
+  text = _decode_bytes(body)
+  if not text:
+    return ''
+
+  if content_type and 'application/json' in content_type:
+    try:
+      return json.dumps(json.loads(text), ensure_ascii=False)
+    except json.JSONDecodeError:
+      return text
+  return text
+
+
+def _log_openai_request(request: fastapi.Request, body: bytes) -> None:
+  body_text = _format_body_for_log(body, request.headers.get('content-type')) if bento_args.log_openai_bodies else '<omitted>'
+  _ensure_body_logger().info(
+    'openai_request method=%s path=%s query=%s headers=%s body=%s',
+    request.method,
+    request.url.path,
+    request.url.query,
+    json.dumps(dict(request.headers), ensure_ascii=False, default=str),
+    body_text,
+  )
+
+
+def _log_openai_response(
+  request: fastapi.Request,
+  *,
+  status_code: int,
+  headers: dict[str, str],
+  body: bytes,
+) -> None:
+  body_text = _format_body_for_log(body, headers.get('content-type')) if bento_args.log_openai_bodies else '<omitted>'
+  _ensure_body_logger().info(
+    'openai_response method=%s path=%s status=%s headers=%s body=%s',
+    request.method,
+    request.url.path,
+    status_code,
+    json.dumps(headers, ensure_ascii=False, default=str),
+    body_text,
+  )
+
+
 class BentoArgs(pydantic.BaseModel):
   tp: int = 4
   dp: int | None = None
   port: int = 8000
   host: str = '0.0.0.0'
+  log_openai_bodies: bool = True
   mem_fraction_static: float = 0.85
   max_session_len: int = 32 * 1024
   max_tokens: int = 16 * 1024
@@ -139,6 +203,72 @@ class BentoArgs(pydantic.BaseModel):
 bento_args = bentoml.use_arguments(BentoArgs)
 
 
+@openai_api_app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+async def openai_proxy(path: str, request: fastapi.Request):
+  upstream_url = httpx.URL(f'http://127.0.0.1:{bento_args.port}/v1/{path}').copy_with(
+    query=request.url.query.encode('utf-8')
+  )
+  request_body = await request.body()
+  request_headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
+  _log_openai_request(request, request_body)
+
+  client = httpx.AsyncClient(timeout=None)
+  upstream_request = client.build_request(
+    method=request.method,
+    url=upstream_url,
+    headers=request_headers,
+    content=request_body,
+  )
+  upstream_response = await client.send(upstream_request, stream=True)
+  response_headers = {k: v for k, v in upstream_response.headers.items() if k.lower() != 'content-length'}
+  content_type = upstream_response.headers.get('content-type')
+
+  if content_type and 'text/event-stream' in content_type:
+    response_chunks: list[bytes] = []
+
+    async def stream_response():
+      try:
+        async for chunk in upstream_response.aiter_bytes():
+          response_chunks.append(chunk)
+          yield chunk
+      finally:
+        _log_openai_response(
+          request,
+          status_code=upstream_response.status_code,
+          headers=response_headers,
+          body=b''.join(response_chunks),
+        )
+        await upstream_response.aclose()
+        await client.aclose()
+
+    return fastapi.responses.StreamingResponse(
+      stream_response(),
+      status_code=upstream_response.status_code,
+      headers=response_headers,
+      media_type=content_type,
+    )
+
+  try:
+    response_body = await upstream_response.aread()
+  finally:
+    await upstream_response.aclose()
+    await client.aclose()
+
+  _log_openai_response(
+    request,
+    status_code=upstream_response.status_code,
+    headers=response_headers,
+    body=response_body,
+  )
+  return fastapi.Response(
+    content=response_body,
+    status_code=upstream_response.status_code,
+    headers=response_headers,
+    media_type=content_type,
+  )
+
+
+@bentoml.asgi_app(openai_api_app, path='/v1')
 @bentoml.service(
   name=bento_args.name,
   envs=bento_args.runtime_envs,
