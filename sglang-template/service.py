@@ -50,6 +50,70 @@ def _format_body_for_log(body: bytes, content_type: str | None) -> str:
   return text
 
 
+def _merge_stream_response_body(body: bytes) -> str:
+  text = _decode_bytes(body)
+  if not text:
+    return ''
+
+  merged: dict[str, typing.Any] = {'object': 'chat.completion.stream_aggregated', 'choices': []}
+  choices: dict[int, dict[str, typing.Any]] = {}
+  usage: typing.Any = None
+
+  for line in text.splitlines():
+    line = line.strip()
+    if not line or not line.startswith('data:'):
+      continue
+    payload = line[5:].strip()
+    if not payload or payload == '[DONE]':
+      continue
+
+    try:
+      chunk = json.loads(payload)
+    except json.JSONDecodeError:
+      continue
+
+    for key in ('id', 'created', 'model', 'system_fingerprint'):
+      if key in chunk:
+        merged[key] = chunk[key]
+
+    if chunk.get('usage') is not None:
+      usage = chunk['usage']
+
+    for choice in chunk.get('choices', []):
+      index = choice.get('index', 0)
+      entry = choices.setdefault(
+        index,
+        {
+          'index': index,
+          'message': {'role': 'assistant', 'content': '', 'reasoning_content': ''},
+          'finish_reason': None,
+          'matched_stop': None,
+        },
+      )
+      delta = choice.get('delta') or {}
+      message = entry['message']
+
+      if delta.get('role') is not None:
+        message['role'] = delta['role']
+      if delta.get('content'):
+        message['content'] += delta['content']
+      if delta.get('reasoning_content'):
+        message['reasoning_content'] += delta['reasoning_content']
+      if delta.get('tool_calls') is not None:
+        existing = message.setdefault('tool_calls', [])
+        existing.extend(delta['tool_calls'])
+
+      if choice.get('finish_reason') is not None:
+        entry['finish_reason'] = choice['finish_reason']
+      if choice.get('matched_stop') is not None:
+        entry['matched_stop'] = choice['matched_stop']
+
+  merged['choices'] = [choices[index] for index in sorted(choices)]
+  if usage is not None:
+    merged['usage'] = usage
+  return json.dumps(merged, ensure_ascii=False, default=str)
+
+
 def _log_openai_request(request: fastapi.Request, body: bytes) -> None:
   body_text = _format_body_for_log(body, request.headers.get('content-type')) if bento_args.log_openai_bodies else '<omitted>'
   _ensure_body_logger().info(
@@ -69,7 +133,13 @@ def _log_openai_response(
   headers: dict[str, str],
   body: bytes,
 ) -> None:
-  body_text = _format_body_for_log(body, headers.get('content-type')) if bento_args.log_openai_bodies else '<omitted>'
+  if bento_args.log_openai_bodies:
+    if headers.get('content-type') and 'text/event-stream' in headers['content-type']:
+      body_text = _merge_stream_response_body(body)
+    else:
+      body_text = _format_body_for_log(body, headers.get('content-type'))
+  else:
+    body_text = '<omitted>'
   _ensure_body_logger().info(
     'openai_response method=%s path=%s status=%s headers=%s body=%s',
     request.method,
