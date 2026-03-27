@@ -18,23 +18,42 @@ else:
 
 
 class BentoArgs(pydantic.BaseModel):
+  class BentoConfig(pydantic.BaseModel):
+    tp: int = 1
+    port: int = 8000
+    attn_backend: str = 'FLASH_ATTN'
+    nightly: bool = False
+
+    name: str = 'llama3.1-8b-instruct'
+    gpu_type: str = 'nvidia-h100-80gb'
+    model_id: str = 'meta-llama/Meta-Llama-3.1-8B-Instruct'
+    local_model_path: str | None = None
+
+    post: list[str] = pydantic.Field(default_factory=list)
+    envs: list[dict[str, str]] = pydantic.Field(default_factory=list)
+    exclude: list[str] = pydantic.Field(default_factory=lambda: ['*.pth', '*.pt', 'original/**/*'])
+    hf_generation_config: dict[str, float | int] = pydantic.Field(
+      default_factory=lambda: {'repetition_penalty': 1.0, 'temperature': 0.6, 'top_p': 0.9}
+    )
+    metadata: dict[str, typing.Any] = pydantic.Field(
+      default_factory=lambda: {
+        'description': 'Llama 3.1 8B Instruct',
+        'provider': 'Meta',
+        'gpu_recommendation': 'an Nvidia GPU with at least 80GB VRAM (e.g about 1 H100 GPU).',
+      }
+    )
+    use_sglang_router: bool = False
+
   tp: int = 1
-  dp: int | None = None
   port: int = 8000
   attn_backend: str = 'FLASH_ATTN'
   nightly: bool = False
-  reasoning_parser: str | None = None
-  tool_parser: str | None = None
-  kv_cache_dtype: str | None = None
-  max_model_len: int | None = None
-  hf_system_prompt: str | None = None
 
   name: str = 'llama3.1-8b-instruct'
   gpu_type: str = 'nvidia-h100-80gb'
   model_id: str = 'meta-llama/Meta-Llama-3.1-8B-Instruct'
   local_model_path: str | None = None
 
-  kv_transfer_config: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
   post: list[str] = pydantic.Field(default_factory=list)
   cli_args: list[str] = pydantic.Field(default_factory=list)
   envs: list[dict[str, str]] = pydantic.Field(default_factory=list)
@@ -64,66 +83,71 @@ class BentoArgs(pydantic.BaseModel):
     return typing.cast(Jsonable, v)
 
   @property
+  def bentoargs(self) -> BentoConfig:
+    return self.BentoConfig.model_validate(self.model_dump(exclude={'cli_args'}))
+
+  @staticmethod
+  def _find_cli_arg(flag: str, cli_args: list[str]) -> str | None:
+    for index, arg in enumerate(cli_args):
+      if arg == flag and index + 1 < len(cli_args):
+        return cli_args[index + 1]
+      if arg.startswith(f'{flag}='):
+        return arg.split('=', 1)[1]
+    return None
+
+  @property
   def additional_cli_args(self) -> list[str]:
-    import torch
-
-    auto_tp_device = str(os.environ.get('TP_AUTO_ALLOCATE', True)).lower() in {'1', 'true', 'yes', 'y'}
-    if auto_tp_device:
-      tp_rank = torch.cuda.device_count()
-    else:
-      tp_rank = self.tp
-
-    default = ['-tp', f'{tp_rank}', *self.cli_args]
-    if self.dp:
-      default.extend(['-dp', f'{self.dp}'])
-    if self.kv_cache_dtype:
-      default.extend(['--kv-cache-dtype', str(self.kv_cache_dtype)])
-    if self.kv_transfer_config:
-      default.extend(['--kv-transfer-config', json.dumps(self.kv_transfer_config)])
-    if self.tool_parser:
-      default.extend(['--enable-auto-tool-choice', '--tool-call-parser', self.tool_parser])
-    if self.reasoning_parser:
-      default.extend(['--reasoning-parser', self.reasoning_parser])
-    if self.max_model_len:
-      default.extend(['--max-model-len', str(self.max_model_len)])
+    default = [*self.cli_args]
+    if '--tensor-parallel-size' not in default and not any(arg.startswith('--tensor-parallel-size=') for arg in default):
+      default.extend(['--tensor-parallel-size', str(self.bentoargs.tp)])
     default.extend(['--compilation-config', json.dumps({'level': 3})])
-    if self.local_model_path:
+    if '--served-model-name' not in default and not any(arg.startswith('--served-model-name=') for arg in default):
+      default.extend(['--served-model-name', self.served_model_name])
+    if self.local_model_path and '--trust-remote-code' not in default:
       default.append('--trust-remote-code')
     return default
 
   @property
   def additional_labels(self) -> dict[str, str]:
+    tool_parser = self._find_cli_arg('--tool-call-parser', self.cli_args) or ''
+    reasoning_parser = self._find_cli_arg('--reasoning-parser', self.cli_args)
     default = {
       'hf_generation_config': json.dumps(self.hf_generation_config),
-      'reasoning': '1' if self.reasoning_parser else '0',
-      'tool': self.tool_parser or '',
+      'reasoning': '1' if reasoning_parser else '0',
+      'tool': tool_parser,
       'openai_model': self.served_model_name,
     }
     return default
 
   @property
   def model_source(self) -> str | bentoml.models.HuggingFaceModel:
-    if self.local_model_path:
-      return os.path.abspath(os.path.expanduser(self.local_model_path))
-    return bentoml.models.HuggingFaceModel(self.model_id, exclude=self.exclude)
+    bentoargs = self.bentoargs
+    if bentoargs.local_model_path:
+      return os.path.abspath(os.path.expanduser(bentoargs.local_model_path))
+    return bentoml.models.HuggingFaceModel(bentoargs.model_id, exclude=bentoargs.exclude)
 
   @property
   def served_model_name(self) -> str:
-    if self.local_model_path and self.model_id == BentoArgs.model_fields['model_id'].default:
-      return os.path.basename(os.path.abspath(os.path.expanduser(self.local_model_path.rstrip('/'))))
-    return self.model_id
+    served_model_name = self._find_cli_arg('--served-model-name', self.cli_args)
+    if served_model_name:
+      return served_model_name
+    bentoargs = self.bentoargs
+    if bentoargs.local_model_path and bentoargs.model_id == BentoArgs.model_fields['model_id'].default:
+      return os.path.basename(os.path.abspath(os.path.expanduser(bentoargs.local_model_path.rstrip('/'))))
+    return bentoargs.model_id
 
   @property
   def runtime_envs(self) -> list[dict[str, str]]:
-    envs = [*self.envs]
+    bentoargs = self.bentoargs
+    envs = [*bentoargs.envs]
     envs.extend([
       {'name': 'VLLM_SKIP_P2P_CHECK', 'value': '1'},
       {'name': 'UV_NO_PROGRESS', 'value': '1'},
       {'name': 'UV_TORCH_BACKEND', 'value': 'cu128'},
     ])
-    if not self.gpu_type.startswith('amd'):
+    if not bentoargs.gpu_type.startswith('amd'):
       envs.extend([
-        {'name': 'VLLM_ATTENTION_BACKEND', 'value': self.attn_backend},
+        {'name': 'VLLM_ATTENTION_BACKEND', 'value': bentoargs.attn_backend},
         {'name': 'TORCH_CUDA_ARCH_LIST', 'value': '7.5 8.0 8.9 9.0a 10.0a 12.0'},
       ])
     if os.getenv('YATAI_T_VERSION'):
@@ -135,6 +159,7 @@ class BentoArgs(pydantic.BaseModel):
 
   @property
   def image(self) -> bentoml.images.Image:
+    bentoargs = self.bentoargs
     image = (
       bentoml.images.Image(
         python_version='3.12',
@@ -145,15 +170,15 @@ class BentoArgs(pydantic.BaseModel):
       .run('ln -sf /usr/bin/pip3 /usr/local/bin/pip')
       .requirements_file('requirements.txt')
     )
-    if self.post:
-      for cmd in self.post:
+    if bentoargs.post:
+      for cmd in bentoargs.post:
         image = image.run(cmd)
 
     if False:  # self.gpu_type.startswith('nvidia'):
       image = image.run('uv pip install flashinfer-python flashinfer-cubin --torch-backend=cu128')
       image = image.run('uv pip install flashinfer-jit-cache --index-url https://flashinfer.ai/whl/cu128')
 
-    if self.gpu_type.startswith('amd'):
+    if bentoargs.gpu_type.startswith('amd'):
       image.base_image = 'rocm/vllm:rocm6.4.1_vllm_0.10.1_20250909'
       # Disable locking of Python packages for AMD GPUs to exclude nvidia-* dependencies
       image.lock_python_packages = False
@@ -162,7 +187,7 @@ class BentoArgs(pydantic.BaseModel):
       # Remove the vllm and torch deps to reuse the pre-installed ones in the base image
       image.run('uv pip uninstall vllm torch torchvision torchaudio triton')
 
-    if self.nightly:
+    if bentoargs.nightly:
       image.run('uv pip uninstall vllm')
       image.run('uv pip install -U vllm --torch-backend=cu129 --extra-index-url https://wheels.vllm.ai/nightly')
 
@@ -171,14 +196,14 @@ class BentoArgs(pydantic.BaseModel):
 
 bento_args = bentoml.use_arguments(BentoArgs)
 
-if bento_args.use_sglang_router:
+if bento_args.bentoargs.use_sglang_router:
   from bento_sgl_router import service
 else:
   service = bentoml.service
 
 
 @service(
-  name=bento_args.name,
+  name=bento_args.bentoargs.name,
   envs=bento_args.runtime_envs,
   image=bento_args.image,
   labels={
@@ -190,7 +215,7 @@ else:
   },
   traffic={'timeout': 300},
   endpoints={'readyz': '/health'},
-  resources={'gpu': bento_args.tp, 'gpu_type': bento_args.gpu_type},
+  resources={'gpu': bento_args.bentoargs.tp, 'gpu_type': bento_args.bentoargs.gpu_type},
 )
 class LLM:
   hf = bento_args.model_source
@@ -201,19 +226,17 @@ class LLM:
       'serve',
       self.hf,
       '--port',
-      str(bento_args.port),
+      str(bento_args.bentoargs.port),
       '--no-use-tqdm-on-load',
       '--disable-uvicorn-access-log',
       '--disable-fastapi-docs',
       *bento_args.additional_cli_args,
-      '--served-model-name',
-      bento_args.served_model_name,
     ]
 
   async def __metrics__(self, content: str) -> str:
     client = typing.cast(httpx.AsyncClient, LLM.context.state['client'])
     try:
-      response = await client.get(f'http://localhost:{bento_args.port}/metrics', timeout=5.0)
+      response = await client.get(f'http://localhost:{bento_args.bentoargs.port}/metrics', timeout=5.0)
       response.raise_for_status()
     except (httpx.ConnectError, httpx.RequestError) as e:
       logger.error('Failed to get metrics: %s', e)
