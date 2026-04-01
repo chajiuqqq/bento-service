@@ -2,6 +2,7 @@ name: minimax-m2-5
 model_id: MiniMaxAI/MiniMax-M2.5
 gpu_type: nvidia-h100-80gb
 tp: 4
+local_model_path: /models/MiniMax-M2.5
 cli_args:
   - --served-model-name
   - MiniMaxAI/MiniMax-M2.5
