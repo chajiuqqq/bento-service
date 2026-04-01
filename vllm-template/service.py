@@ -100,7 +100,6 @@ class BentoArgs(pydantic.BaseModel):
     default = [*self.cli_args]
     if '--tensor-parallel-size' not in default and not any(arg.startswith('--tensor-parallel-size=') for arg in default):
       default.extend(['--tensor-parallel-size', str(self.bentoargs.tp)])
-    default.extend(['--compilation-config', json.dumps({'level': 3})])
     if '--served-model-name' not in default and not any(arg.startswith('--served-model-name=') for arg in default):
       default.extend(['--served-model-name', self.served_model_name])
     if self.local_model_path and '--trust-remote-code' not in default:
