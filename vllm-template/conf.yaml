@@ -15,12 +15,15 @@ cli_args:
   - --gpu-memory-utilization
   - "0.8"
   - --max-model-len
-  - 196k
+  - 192k
+  - --max-num-batched-tokens
+  - 16k
   - --max-num-seqs
-  - "16"
+  - "32"
   - --disable-custom-all-reduce
   - --kv-cache-dtype
   - fp8
+  - --enable-prompt-tokens-details
 metadata:
   description: MiniMax M2.5
   provider: MiniMax
