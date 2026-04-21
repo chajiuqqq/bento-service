@@ -2,6 +2,6 @@
 set -euo pipefail
 
 docker build \
-  -f docker/Dockerfile.blackwell.bentoml \
-  -t vllm-blackwell:latest \
+  -f docker/Dockerfile \
+  -t vllm-bentoml:latest \
   .
