@@ -6,7 +6,9 @@ import json
 import logging
 import os
 import signal
+import subprocess
 import sys
+import threading
 import typing
 
 import bentoml
@@ -417,41 +419,45 @@ async def openai_proxy(path: str, request: fastapi.Request):
 class SGL:
   hf = bento_args.model_source
 
-  async def __init__(self) -> None:
-    self._proc: asyncio.subprocess.Process | None = None
-    self._stderr_task: asyncio.Task | None = None
+  def __init__(self) -> None:
+    self._proc: subprocess.Popen | None = None
 
     cmd = [
       'python3', '-m', 'sglang.launch_server',
       '--model-path', str(self.hf),
       *bento_args.additional_cli_args,
     ]
-    self._proc = await asyncio.create_subprocess_exec(
-      *cmd,
-      stdout=asyncio.subprocess.PIPE,
-      stderr=asyncio.subprocess.PIPE,
+    self._proc = subprocess.Popen(
+      cmd,
+      stdout=subprocess.DEVNULL,
+      stderr=subprocess.PIPE,
     )
-    self._stderr_task = asyncio.create_task(self._pipe_stderr(), name='sglang-stderr')
+    self._stderr_thread = threading.Thread(
+      target=self._pipe_stderr, daemon=True, name='sglang-stderr'
+    )
+    self._stderr_thread.start()
 
-  async def _pipe_stderr(self) -> None:
+  def _pipe_stderr(self) -> None:
     assert self._proc is not None and self._proc.stderr is not None
-    async for raw in self._proc.stderr:
+    for raw in self._proc.stderr:
       text = raw.decode('utf-8', errors='replace').rstrip()
       if text:
         _log_stderr(text)
-    exit_code = await self._proc.wait()
+    exit_code = self._proc.wait()
     _log_stderr(f'sglang process exited with code {exit_code}')
 
   async def __shutdown__(self) -> None:
-    if self._stderr_task and not self._stderr_task.done():
-      self._stderr_task.cancel()
     if self._proc is not None and self._proc.returncode is None:
       self._proc.send_signal(signal.SIGTERM)
+      loop = asyncio.get_event_loop()
       try:
-        await asyncio.wait_for(self._proc.wait(), timeout=30)
+        await asyncio.wait_for(
+          loop.run_in_executor(None, self._proc.wait),
+          timeout=30,
+        )
       except asyncio.TimeoutError:
         self._proc.kill()
-        await self._proc.wait()
+        self._proc.wait()
 
   async def __metrics__(self, content: str) -> str:
     client = typing.cast(httpx.AsyncClient, SGL.context.state['client'])
