@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import logging
 import os
+import signal
 import sys
 import typing
 
@@ -168,6 +170,25 @@ def _log_openai_response(
   )
 
 
+def _log_openai_error(request: fastapi.Request, *, trace_id: str, error: str, status_code: int = 502) -> None:
+  _ensure_body_logger().info(
+    'openai_error method=%s path=%s status=%s error=%s trace_id=%s',
+    request.method,
+    request.url.path,
+    status_code,
+    error,
+    trace_id,
+  )
+
+
+def _log_stderr(text: str) -> None:
+  print(json.dumps({
+    'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    'logger': 'sglang.stderr',
+    'message': text,
+  }), flush=True)
+
+
 class BentoArgs(pydantic.BaseModel):
   tp: int = 4
   dp: int | None = None
@@ -313,7 +334,16 @@ async def openai_proxy(path: str, request: fastapi.Request):
     headers=request_headers,
     content=request_body,
   )
-  upstream_response = await client.send(upstream_request, stream=True)
+  try:
+    upstream_response = await client.send(upstream_request, stream=True)
+  except httpx.HTTPError as exc:
+    _log_openai_error(request, trace_id=trace_id, error=str(exc))
+    await client.aclose()
+    return fastapi.Response(
+      json.dumps({'error': 'upstream error', 'trace_id': trace_id}),
+      status_code=502,
+      media_type='application/json',
+    )
   response_headers = {k: v for k, v in upstream_response.headers.items() if k.lower() != 'content-length'}
   content_type = upstream_response.headers.get('content-type')
 
@@ -387,15 +417,41 @@ async def openai_proxy(path: str, request: fastapi.Request):
 class SGL:
   hf = bento_args.model_source
 
-  def __command__(self) -> list[str]:
-    return [
-      'python3',
-      '-m',
-      'sglang.launch_server',
-      '--model-path',
-      self.hf,
+  async def __init__(self) -> None:
+    self._proc: asyncio.subprocess.Process | None = None
+    self._stderr_task: asyncio.Task | None = None
+
+    cmd = [
+      'python3', '-m', 'sglang.launch_server',
+      '--model-path', str(self.hf),
       *bento_args.additional_cli_args,
     ]
+    self._proc = await asyncio.create_subprocess_exec(
+      *cmd,
+      stdout=asyncio.subprocess.PIPE,
+      stderr=asyncio.subprocess.PIPE,
+    )
+    self._stderr_task = asyncio.create_task(self._pipe_stderr(), name='sglang-stderr')
+
+  async def _pipe_stderr(self) -> None:
+    assert self._proc is not None and self._proc.stderr is not None
+    async for raw in self._proc.stderr:
+      text = raw.decode('utf-8', errors='replace').rstrip()
+      if text:
+        _log_stderr(text)
+    exit_code = await self._proc.wait()
+    _log_stderr(f'sglang process exited with code {exit_code}')
+
+  async def __shutdown__(self) -> None:
+    if self._stderr_task and not self._stderr_task.done():
+      self._stderr_task.cancel()
+    if self._proc is not None and self._proc.returncode is None:
+      self._proc.send_signal(signal.SIGTERM)
+      try:
+        await asyncio.wait_for(self._proc.wait(), timeout=30)
+      except asyncio.TimeoutError:
+        self._proc.kill()
+        await self._proc.wait()
 
   async def __metrics__(self, content: str) -> str:
     client = typing.cast(httpx.AsyncClient, SGL.context.state['client'])
