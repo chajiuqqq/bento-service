@@ -1,0 +1,49 @@
+name: MiniMax-M2.7-NVFP4
+model_id: MiniMax-M2.7-NVFP4
+local_model_path: /models/MiniMax-M2.7-NVFP4
+gpu_type: nvidia-h100-80gb
+tp: 2
+log_openai_bodies: false
+max_session_len: 120000
+mem_fraction_static: 0.85
+cli_args:
+  -  --model-path
+  - /models/MiniMax-M2.7-NVFP4
+  - --served-model-name
+  - MiniMax-M2.7
+  - --reasoning-parser
+  - minimax
+  - --tool-call-parser
+  - minimax-m2
+  - --tp
+  - "2"
+  - --enable-torch-compile
+  - --trust-remote-code
+  - --quantization
+  - modelopt_fp4
+  - --kv-cache-dtype
+  - fp8_e4m3
+  - --moe-runner-backend
+  - b12x
+  - --fp4-gemm-backend
+  - b12x
+  - --attention-backend
+  - flashinfer
+  - --enable-pcie-oneshot-allreduce
+  - --mem-fraction-static
+  - "0.85"
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+  - --enable-cache-report
+  - --enable-metrics
+  - --enable-hierarchical-cache
+  - --hicache-ratio
+  - "10"
+  - --cuda-graph-max-bs
+  - "8"
+  - --max-queued-requests
+  - "32"
+  - --max-running-requests
+  - "16"

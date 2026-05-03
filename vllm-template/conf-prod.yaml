@@ -1,0 +1,33 @@
+name: minimax-m2-5
+model_id: MiniMaxAI/MiniMax-M2.7
+gpu_type: nvidia-h100-80gb
+tp: 4
+local_model_path: /models/MiniMax-M2.7
+cli_args:
+  - --served-model-name
+  - MiniMaxAI/MiniMax-M2.7
+  - --trust-remote-code
+  - --enable-auto-tool-choice
+  - --tool-call-parser
+  - minimax_m2
+  - --reasoning-parser
+  - minimax_m2
+  - --gpu-memory-utilization
+  - "0.8"
+  - --max-model-len
+  - 192k
+  - --max-num-batched-tokens
+  - 16k
+  - --max-num-seqs
+  - "32"
+  - --disable-custom-all-reduce
+  - --kv-cache-dtype
+  - fp8
+  - --kv-offloading-size
+  - "500"
+  - --disable-hybrid-kv-cache-manager
+  - --enable-prompt-tokens-details
+metadata:
+  description: MiniMax M2.7
+  provider: MiniMax
+  gpu_recommendation: an Nvidia GPU with at least 80GB VRAM
