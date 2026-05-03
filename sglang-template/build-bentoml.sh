@@ -3,5 +3,5 @@ set -euo pipefail
 
 docker build \
   -f docker/Dockerfile.blackwell.bentoml \
-  -t sglang-blackwell:sm120a-bento \
+  -t sglang-bentoml:cu130 \
   .
