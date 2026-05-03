@@ -24,6 +24,9 @@ cli_args:
   - --kv-cache-dtype
   - fp8
   - --enable-prompt-tokens-details
+log_body: false
+log_level: INFO
+trace_header: X-Oneapi-Request-Id
 metadata:
   description: MiniMax M2.5
   provider: MiniMax

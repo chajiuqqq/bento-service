@@ -168,6 +168,17 @@ def _log_openai_response(
   )
 
 
+def _log_openai_error(request: fastapi.Request, *, trace_id: str, error: str, status_code: int = 502) -> None:
+  _ensure_body_logger().info(
+    'openai_error method=%s path=%s status=%s error=%s trace_id=%s',
+    request.method,
+    request.url.path,
+    status_code,
+    error,
+    trace_id,
+  )
+
+
 class BentoArgs(pydantic.BaseModel):
   tp: int = 4
   dp: int | None = None
@@ -313,7 +324,16 @@ async def openai_proxy(path: str, request: fastapi.Request):
     headers=request_headers,
     content=request_body,
   )
-  upstream_response = await client.send(upstream_request, stream=True)
+  try:
+    upstream_response = await client.send(upstream_request, stream=True)
+  except httpx.HTTPError as exc:
+    _log_openai_error(request, trace_id=trace_id, error=str(exc))
+    await client.aclose()
+    return fastapi.Response(
+      json.dumps({'error': 'upstream error', 'trace_id': trace_id}),
+      status_code=502,
+      media_type='application/json',
+    )
   response_headers = {k: v for k, v in upstream_response.headers.items() if k.lower() != 'content-length'}
   content_type = upstream_response.headers.get('content-type')
 
