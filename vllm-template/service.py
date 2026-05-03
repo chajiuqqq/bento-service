@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
+import sys
 import typing
 
 import bentoml
+import fastapi
 import httpx
 import pydantic
 
@@ -43,6 +46,9 @@ class BentoArgs(pydantic.BaseModel):
       }
     )
     use_sglang_router: bool = False
+    log_body: bool = False
+    log_level: str = 'INFO'
+    trace_header: str = 'X-Oneapi-Request-Id'
 
   tp: int = 1
   port: int = 8000
@@ -69,6 +75,9 @@ class BentoArgs(pydantic.BaseModel):
     }
   )
   use_sglang_router: bool = False
+  log_body: bool = False
+  log_level: str = 'INFO'
+  trace_header: str = 'X-Oneapi-Request-Id'
 
   @pydantic.field_validator('exclude', 'cli_args', 'post', 'envs', 'hf_generation_config', 'metadata', mode='before')
   @classmethod
@@ -195,12 +204,124 @@ class BentoArgs(pydantic.BaseModel):
 
 bento_args = bentoml.use_arguments(BentoArgs)
 
+
+# ── JSON 结构化日志 ──────────────────────────────────────────────
+
+def _setup_json_logging() -> None:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(bento_args.bentoargs.log_level.upper())
+
+    class _JSONFormatter(logging.Formatter):
+        def format(self, record: logging.LogRecord) -> str:
+            log = {
+                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'level': record.levelname,
+                'logger': record.name,
+                'message': record.getMessage(),
+            }
+            trace_id = getattr(record, 'trace_id', None)
+            if trace_id:
+                log['trace_id'] = trace_id
+            event = getattr(record, 'event', None)
+            if event:
+                log['event'] = event
+            extra = getattr(record, 'extra', None)
+            if extra:
+                log.update(extra)
+            return json.dumps(log, ensure_ascii=False)
+
+    handler.setFormatter(_JSONFormatter())
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(bento_args.bentoargs.log_level.upper())
+
+
+def _log_event(event: str, trace_id: str = '', **extra) -> None:
+    logger.info(event, extra={'trace_id': trace_id, 'event': event, 'extra': extra})
+
+
+_setup_json_logging()
+
+# ── FastAPI 代理层 ──────────────────────────────────────────────
+
+TRACE_HEADER = bento_args.bentoargs.trace_header
+VLLM_PORT = bento_args.bentoargs.port
+LOG_BODY = bento_args.bentoargs.log_body
+
+openai_api_app = fastapi.FastAPI()
+
+
+@openai_api_app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'])
+async def proxy(path: str, request: fastapi.Request):
+    trace_id = request.headers.get(TRACE_HEADER, '')
+    start = datetime.datetime.now(datetime.timezone.utc)
+
+    body = await request.body()
+    _log_event('request_received', trace_id,
+               method=request.method, path=f'/v1/{path}',
+               body=body.decode(errors='replace') if LOG_BODY else '',
+               content_type=request.headers.get('content-type', ''))
+
+    upstream_url = f'http://127.0.0.1:{VLLM_PORT}/v1/{path}'
+
+    headers = dict(request.headers)
+    headers.pop('host', None)
+    headers[TRACE_HEADER] = trace_id
+
+    client = httpx.AsyncClient(timeout=None)
+    try:
+        upstream_resp = await client.request(
+            method=request.method,
+            url=upstream_url,
+            headers=headers,
+            content=body,
+        )
+    except Exception as e:
+        _log_event('error', trace_id, error=str(e), elapsed_ms=round(
+            (datetime.datetime.now(datetime.timezone.utc) - start).total_seconds() * 1000, 1))
+        await client.aclose()
+        return fastapi.Response('upstream error', status_code=502)
+
+    latency = (datetime.datetime.now(datetime.timezone.utc) - start).total_seconds() * 1000
+    _log_event('upstream_response', trace_id,
+               status=upstream_resp.status_code, latency_ms=round(latency, 1))
+
+    resp_headers = dict(upstream_resp.headers)
+    content_type = upstream_resp.headers.get('content-type', '')
+
+    if 'text/event-stream' in content_type:
+        _log_event('stream_start', trace_id)
+
+        async def stream():
+            try:
+                async for chunk in upstream_resp.aiter_bytes():
+                    yield chunk
+            except Exception as e:
+                _log_event('stream_error', trace_id, error=str(e))
+            finally:
+                total_ms = round((datetime.datetime.now(datetime.timezone.utc) - start).total_seconds() * 1000, 1)
+                _log_event('stream_end', trace_id, duration_ms=total_ms)
+                await upstream_resp.aclose()
+                await client.aclose()
+
+        return fastapi.responses.StreamingResponse(
+            stream(), status_code=upstream_resp.status_code, headers=resp_headers,
+            media_type=content_type)
+
+    resp_body = await upstream_resp.aread()
+    await upstream_resp.aclose()
+    await client.aclose()
+    return fastapi.Response(content=resp_body, status_code=upstream_resp.status_code,
+                            headers=resp_headers, media_type=content_type)
+
 if bento_args.bentoargs.use_sglang_router:
   from bento_sgl_router import service
 else:
   service = bentoml.service
 
 
+@bentoml.asgi_app(openai_api_app, path='/v1')
 @service(
   name=bento_args.bentoargs.name,
   envs=bento_args.runtime_envs,

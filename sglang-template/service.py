@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -26,7 +27,21 @@ def _ensure_body_logger() -> logging.Logger:
     return body_logger
 
   handler = logging.StreamHandler(sys.stdout)
-  handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+
+  class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+      return json.dumps(
+        {
+          'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+          'level': record.levelname,
+          'logger': record.name,
+          'message': record.getMessage(),
+        },
+        ensure_ascii=False,
+        default=str,
+      )
+
+  handler.setFormatter(JSONFormatter())
   body_logger.setLevel(logging.INFO)
   body_logger.addHandler(handler)
   body_logger.propagate = False
@@ -114,15 +129,16 @@ def _merge_stream_response_body(body: bytes) -> str:
   return json.dumps(merged, ensure_ascii=False, default=str)
 
 
-def _log_openai_request(request: fastapi.Request, body: bytes) -> None:
+def _log_openai_request(request: fastapi.Request, body: bytes, *, trace_id: str = '') -> None:
   body_text = _format_body_for_log(body, request.headers.get('content-type')) if bento_args.log_openai_bodies else '<omitted>'
   _ensure_body_logger().info(
-    'openai_request method=%s path=%s query=%s headers=%s body=%s',
+    'openai_request method=%s path=%s query=%s headers=%s body=%s trace_id=%s',
     request.method,
     request.url.path,
     request.url.query,
     json.dumps(dict(request.headers), ensure_ascii=False, default=str),
     body_text,
+    trace_id,
   )
 
 
@@ -132,6 +148,7 @@ def _log_openai_response(
   status_code: int,
   headers: dict[str, str],
   body: bytes,
+  trace_id: str = '',
 ) -> None:
   if bento_args.log_openai_bodies:
     if headers.get('content-type') and 'text/event-stream' in headers['content-type']:
@@ -141,12 +158,13 @@ def _log_openai_response(
   else:
     body_text = '<omitted>'
   _ensure_body_logger().info(
-    'openai_response method=%s path=%s status=%s headers=%s body=%s',
+    'openai_response method=%s path=%s status=%s headers=%s body=%s trace_id=%s',
     request.method,
     request.url.path,
     status_code,
     json.dumps(headers, ensure_ascii=False, default=str),
     body_text,
+    trace_id,
   )
 
 
@@ -156,6 +174,8 @@ class BentoArgs(pydantic.BaseModel):
   port: int = 8000
   host: str = '0.0.0.0'
   log_openai_bodies: bool = True
+  log_level: str = 'INFO'
+  trace_header: str = 'X-Oneapi-Request-Id'
   mem_fraction_static: float = 0.85
   max_session_len: int = 32 * 1024
   max_tokens: int = 16 * 1024
@@ -275,12 +295,16 @@ bento_args = bentoml.use_arguments(BentoArgs)
 
 @openai_api_app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 async def openai_proxy(path: str, request: fastapi.Request):
+  trace_id = request.headers.get(bento_args.trace_header, '')
   upstream_url = httpx.URL(f'http://127.0.0.1:{bento_args.port}/v1/{path}').copy_with(
     query=request.url.query.encode('utf-8')
   )
   request_body = await request.body()
   request_headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
-  _log_openai_request(request, request_body)
+  _log_openai_request(request, request_body, trace_id=trace_id)
+
+  if trace_id and bento_args.trace_header.lower() not in {k.lower() for k in request_headers}:
+    request_headers[bento_args.trace_header] = trace_id
 
   client = httpx.AsyncClient(timeout=None)
   upstream_request = client.build_request(
@@ -307,6 +331,7 @@ async def openai_proxy(path: str, request: fastapi.Request):
           status_code=upstream_response.status_code,
           headers=response_headers,
           body=b''.join(response_chunks),
+          trace_id=trace_id,
         )
         await upstream_response.aclose()
         await client.aclose()
@@ -329,6 +354,7 @@ async def openai_proxy(path: str, request: fastapi.Request):
     status_code=upstream_response.status_code,
     headers=response_headers,
     body=response_body,
+    trace_id=trace_id,
   )
   return fastapi.Response(
     content=response_body,
