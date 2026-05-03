@@ -460,12 +460,11 @@ class SGL:
         self._proc.wait()
 
   async def __metrics__(self, content: str) -> str:
-    client = typing.cast(httpx.AsyncClient, SGL.context.state['client'])
     try:
-      response = await client.get(f'http://localhost:{bento_args.port}/metrics', timeout=5.0)
-      response.raise_for_status()
-    except httpx.HTTPError as exc:
-      logger.warning('Failed to get SGLang metrics: %s', exc)
+      async with httpx.AsyncClient(timeout=5.0) as client:
+        response = await client.get(f'http://localhost:{bento_args.port}/metrics')
+        response.raise_for_status()
+        return content + '\n' + response.text
+    except Exception:
+      logger.warning('Failed to get SGLang metrics', exc_info=True)
       return content
-    else:
-      return content + '\n' + response.text
