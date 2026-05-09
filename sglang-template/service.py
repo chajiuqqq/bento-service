@@ -8,9 +8,11 @@ import sys
 import typing
 
 import bentoml
-import fastapi
-import httpx
-import pydantic
+
+with bentoml.importing():
+  import fastapi
+  import httpx
+  import pydantic
 
 logger = logging.getLogger(__name__)
 openai_api_app = fastapi.FastAPI()
