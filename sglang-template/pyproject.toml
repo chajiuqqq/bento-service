@@ -19,3 +19,7 @@ include = [
   "uv.lock",
   "*.yaml",
 ]
+
+[tool.bentoml.build.docker]
+base_image = "voipmonitor/sglang:cu130-fix"
+setup_script = "./docker/setup.sh"
