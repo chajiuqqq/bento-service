@@ -289,11 +289,9 @@ class BentoArgs(pydantic.BaseModel):
     image = (
       bentoml.images.Image(
         python_version='3.12',
-        base_image='docker.io/nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04',
+        base_image='voipmonitor/sglang:cu130-fix',
         lock_python_packages=False,
       )
-      .system_packages('git', 'python3', 'python3-pip', 'libopenmpi-dev')
-      .run('ln -sf /usr/bin/pip3 /usr/local/bin/pip')
     )
     if self.post:
       for cmd in self.post:
