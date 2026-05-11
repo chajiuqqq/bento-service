@@ -263,10 +263,10 @@ class BentoArgs(pydantic.BaseModel):
     }
 
   @property
-  def model_source(self) -> str | bentoml.models.HuggingFaceModel:
+  def model_source(self) -> str:
     if self.local_model_path:
       return os.path.abspath(os.path.expanduser(self.local_model_path))
-    return bentoml.models.HuggingFaceModel(self.model_id, exclude=self.exclude)
+    return self.model_id
 
   @property
   def served_model_name(self) -> str:
@@ -285,21 +285,6 @@ class BentoArgs(pydantic.BaseModel):
       {'name': 'UV_NO_PROGRESS', 'value': '1'},
     ])
     return envs
-
-  @property
-  def image(self) -> bentoml.images.Image:
-    image = (
-      bentoml.images.Image(
-        python_version='3.12',
-        base_image='voipmonitor/sglang:cu130-fix',
-        lock_python_packages=False,
-      )
-    )
-    if self.post:
-      for cmd in self.post:
-        image = image.run(cmd)
-    return image
-
 
 bento_args = bentoml.use_arguments(BentoArgs)
 
@@ -388,7 +373,6 @@ async def openai_proxy(path: str, request: fastapi.Request):
 @bentoml.service(
   name=bento_args.name,
   envs=bento_args.runtime_envs,
-  image=bento_args.image,
   labels={
     'owner': 'bentoml-team',
     'type': 'prebuilt',
