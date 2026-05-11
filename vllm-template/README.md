@@ -1,123 +1,65 @@
-<div align="center">
-    <h1 align="center">Self-host Qwen 3 8B with vLLM and BentoML</h1>
-</div>
+# 构建 Bento 并容器化
 
-Follow this guide to self-host the Qwen 3 8B model with BentoCloud in your own cloud account. If your team doesn’t already have access to BentoCloud, please use the link below to contact us and set it up in your cloud environment.
-
-[![Deploy on BentoCloud](https://img.shields.io/badge/Deploy_on_BentoCloud-d0bfff?style=for-the-badge)](https://cloud.bentoml.com/)
-[![Talk to sales](https://img.shields.io/badge/Talk_to_sales-eefbe4?style=for-the-badge)](https://bentoml.com/contact)
-
-See [here](https://docs.bentoml.com/en/latest/examples/overview.html) for a full list of BentoML example projects.
-
-💡 This example is served as a basis for advanced code customization, such as custom model, inference logic or vLLM options. For simple LLM hosting with OpenAI compatible endpoint without writing any code, see [OpenLLM](https://github.com/bentoml/OpenLLM).
-
-## Prerequisites
-- If you want to test the Service locally, we recommend you use an Nvidia GPU with at least 80GB VRAM (e.g about 1 H100 GPU).
-
-## Install dependencies
+## 构建
 
 ```bash
-git clone https://github.com/bentoml/BentoVLLM.git
-cd BentoVLLM/qwen3-8b
-
-# Recommend Python 3.11
-pip install -r requirements.txt
-
-# if you are running locally, we recommend install additional flashinfer library for better performance.
-pip install flashinfer-python --extra-index-url https://flashinfer.ai/whl/cu124/torch2.6
+bentoml build
+bentoml containerize qwen3-8b:latest -t vllm-bento:latest
 ```
 
-## Run the BentoML Service
+## 运行方式
 
-We have defined a BentoML Service in `service.py`. To run the service do the following:
+### 方案一：打包配置，只挂载模型
 
-```python
-$ bentoml serve service.py:LLM
-```
-
-The server is now active at [http://localhost:3000](http://localhost:3000/). You can interact with it using the Swagger UI or in other different ways.
-
-## OpenAI-compatible endpoints
-
-```python
-from openai import OpenAI
-
-client = OpenAI(base_url='http://localhost:3000/v1', api_key='na')
-
-completion = client.chat.completions.create(
-    model=client.models.list().data[0].id,
-    messages=[
-        {
-            "role": "user",
-            "content": "Who are you? Please respond in pirate speak!"
-        }
-    ],
-    stream=True,
-)
-for chunk in completion:
-    # Extract and print the content of the model's reply
-    print(chunk.choices[0].delta.content or "", end="")
-```
-
-These OpenAI-compatible endpoints also support [vLLM extra parameters](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#extra-parameters). For example, you can force the chat completion output a JSON object by using the `guided_json` parameters:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(base_url='http://localhost:3000/v1', api_key='na')
-
-json_schema = {
-    "type": "object",
-    "properties": {
-        "city": {"type": "string"}
-    }
-}
-
-completion = client.chat.completions.create(
-    model=client.models.list().data[0].id,
-    messages=[
-        {
-            "role": "user",
-            "content": "What is the capital of France?"
-        }
-    ],
-    extra_body=dict(guided_json=json_schema),
-)
-print(completion.choices[0].message.content)  # will return something like: {"city": "Paris"}
-```
-
-All supported extra parameters are listed in [vLLM documentation](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#extra-parameters).
-
-**Note**: If your Service is deployed with [protected endpoints on BentoCloud](https://docs.bentoml.com/en/latest/bentocloud/how-tos/manage-access-token.html#access-protected-deployments), you need to set the environment variable `OPENAI_API_KEY` to your BentoCloud API key first.
+配置已打包在 bento 中，运行时只需挂载模型目录。
 
 ```bash
-export OPENAI_API_KEY={YOUR_BENTOCLOUD_API_TOKEN}
+docker run --rm -it --gpus all -p 3000:3000 \
+  -v /mnt/modules:/models:ro \
+  --ipc=host \
+  vllm-bento:latest
 ```
 
-You can then use the following line to replace the client in the above code snippet. Refer to [Obtain the endpoint URL](https://docs.bentoml.com/en/latest/bentocloud/how-tos/call-deployment-endpoints.html#obtain-the-endpoint-url) to retrieve the endpoint URL.
+适用于生产部署：镜像包含完整配置，无需额外文件。
 
-```python
-client = OpenAI(base_url='your_bentocloud_deployment_endpoint_url/v1')
-```
+### 方案二：挂载项目路径（开发调试）
 
-For detailed explanations of the Service code, see [vLLM inference](https://docs.bentoml.org/en/latest/examples/vllm.html).
-
-## Deploy to BentoCloud
-
-After the Service is ready, you can deploy the application to BentoCloud for better management and scalability. [Sign up](https://www.bentoml.com/) if you haven't got a BentoCloud account.
-
-Make sure you have [logged in to BentoCloud](https://docs.bentoml.com/en/latest/scale-with-bentocloud/manage-api-tokens.html).
+将整个项目目录挂载到容器，覆盖 bento 内的配置。
 
 ```bash
-bentoml cloud login
+docker run --rm -it --gpus all -p 3000:3000 \
+  -v /mnt/modules:/models:ro \
+  -v ./:/bentoml-workspace:ro \
+  --ipc=host \
+  vllm-bento:latest
 ```
 
-Create a BentoCloud deployment from this service:
+适用于开发：修改 `conf.yaml` 后重启容器即可生效，无需重建镜像。
+
+## 设计说明
+
+### 问题
+基础镜像 `vllm/vllm-openai:latest` 已将 vllm、torch 2.10.0+cu129 等依赖安装在 `/usr/local/lib/python3.12/dist-packages`（全局 Python）。默认的 BentoML Dockerfile 会创建 `/app/.venv`，新 venv 默认不继承系统 site-packages，导致无法访问基镜像预装的包。
+
+### 方案
+使用自定义 `dockerfile_template`（`docker/Dockerfile.template.j2`）绕过默认的 venv 创建流程：
+
+- **`SETUP_BENTO_USER`** — 跳过用户创建（基镜像已有）
+- **`SETUP_BENTO_ENVARS`** — 设置环境变量和 WORKDIR
+- **`SETUP_BENTO_COMPONENTS`** — 直接复制文件，`pip install` 到基镜像的全局 Python 环境
+- **`SETUP_BENTO_ENTRYPOINT`** — `bentoml serve /app`
+
+### 注意
+- 此模板与基镜像强关联：假设 `/usr/bin/python3` 为全局 Python，site-packages 在 `/usr/local/lib/python3.12/dist-packages`
+- `dockerfile_template` 仅支持 BentoML v1 API（v2 不支持此选项，构建时会自动 fallback 到 v1）
+- `pyproject.toml` 中使用 `[tool.bentoml.build.docker]` 配置，而不是 v2 的 `bentoml.images.Image`
+
+## 测试
 
 ```bash
-bentoml deploy service.py:LLM
+curl http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{ "model": "MiniMaxAI/MiniMax-M2.5",
+     "messages": [{"role": "user", "content": "你好,介绍你自己"}],
+       "stream": false }'
 ```
-
-Once the application is up and running on BentoCloud, you can access it via the exposed URL.
-
-**Note**: For custom deployment in your own infrastructure, use [BentoML to generate an OCI-compliant image](https://docs.bentoml.com/en/latest/get-started/packaging-for-deployment.html).

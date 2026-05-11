@@ -128,11 +128,11 @@ class BentoArgs(pydantic.BaseModel):
     return default
 
   @property
-  def model_source(self) -> str | bentoml.models.HuggingFaceModel:
+  def model_source(self) -> str:
     bentoargs = self.bentoargs
     if bentoargs.local_model_path:
       return os.path.abspath(os.path.expanduser(bentoargs.local_model_path))
-    return bentoml.models.HuggingFaceModel(bentoargs.model_id, exclude=bentoargs.exclude)
+    return bentoargs.model_id
 
   @property
   def served_model_name(self) -> str:
@@ -164,43 +164,6 @@ class BentoArgs(pydantic.BaseModel):
         {'name': 'VLLM_CACHE_ROOT', 'value': '/home/bentoml/bento/vllm-models'},
       ])
     return envs
-
-  @property
-  def image(self) -> bentoml.images.Image:
-    bentoargs = self.bentoargs
-    image = (
-      bentoml.images.Image(
-        python_version='3.12',
-        base_image="nvidia/cuda:12.9.1-cudnn-runtime-ubuntu22.04",
-        lock_python_packages=False,
-      )
-      .system_packages('curl', 'git', 'python3', 'python3-pip')
-      .run('ln -sf /usr/bin/pip3 /usr/local/bin/pip')
-      .requirements_file('requirements.txt')
-    )
-    if bentoargs.post:
-      for cmd in bentoargs.post:
-        image = image.run(cmd)
-
-    if False:  # self.gpu_type.startswith('nvidia'):
-      image = image.run('uv pip install flashinfer-python flashinfer-cubin --torch-backend=cu128')
-      image = image.run('uv pip install flashinfer-jit-cache --index-url https://flashinfer.ai/whl/cu128')
-
-    if bentoargs.gpu_type.startswith('amd'):
-      image.base_image = 'rocm/vllm:rocm6.4.1_vllm_0.10.1_20250909'
-      # Disable locking of Python packages for AMD GPUs to exclude nvidia-* dependencies
-      image.lock_python_packages = False
-      # The GPU device is accessible by group 992
-      image.run('groupadd -g 992 -o rocm && usermod -aG rocm bentoml && usermod -aG render bentoml')
-      # Remove the vllm and torch deps to reuse the pre-installed ones in the base image
-      image.run('uv pip uninstall vllm torch torchvision torchaudio triton')
-
-    if bentoargs.nightly:
-      image.run('uv pip uninstall vllm')
-      image.run('uv pip install -U vllm --torch-backend=cu129 --extra-index-url https://wheels.vllm.ai/nightly')
-
-    return image
-
 
 bento_args = bentoml.use_arguments(BentoArgs)
 
@@ -325,7 +288,6 @@ else:
 @service(
   name=bento_args.bentoargs.name,
   envs=bento_args.runtime_envs,
-  image=bento_args.image,
   labels={
     'owner': 'bentoml-team',
     'type': 'prebuilt',
@@ -333,7 +295,7 @@ else:
     'openai_endpoint': '/v1',
     **bento_args.additional_labels,
   },
-  traffic={'timeout': 300},
+  traffic={'timeout': 600},
   endpoints={'readyz': '/health'},
   resources={'gpu': bento_args.bentoargs.tp, 'gpu_type': bento_args.bentoargs.gpu_type},
 )

@@ -1,0 +1,32 @@
+{% extends "base.j2" %}
+
+{% block SETUP_BENTO_USER %}
+{% endblock %}
+
+{% block SETUP_BENTO_ENVARS %}
+
+ARG BENTO_PATH=/app
+ENV BENTO_PATH=$BENTO_PATH
+ENV BENTOML_HOME={{ bento__home }}
+ENV BENTOML_HF_CACHE_DIR=/app/hf-models
+ENV BENTOML_CONTAINERIZED=true
+
+WORKDIR /app
+
+{% endblock %}
+
+{% block SETUP_BENTO_COMPONENTS %}
+
+COPY --chown=root:root ./env/python ./env/python/
+COPY --chown=root:root . ./
+RUN python3 -m pip install --no-cache-dir -r ./env/python/requirements.txt
+
+{% endblock %}
+
+{% block SETUP_BENTO_ENTRYPOINT %}
+EXPOSE 3000
+EXPOSE {{ __prometheus_port__ }}
+
+ENTRYPOINT [ "bentoml", "serve", "/app" ]
+
+{% endblock %}
