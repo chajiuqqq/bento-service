@@ -32,41 +32,6 @@ include = [
   "templates/*",
 ]
 
-[tool.bentoml.build.args]
-name = "minimax-m2-5"
-gpu_type = "nvidia-h100-80gb"
-tp = 4
-model_id = "MiniMaxAI/MiniMax-M2.5"
-cli_args = [
-  "--served-model-name",
-  "MiniMaxAI/MiniMax-M2.5",
-  "--trust-remote-code",
-  "--enable-auto-tool-choice",
-  "--tool-call-parser",
-  "minimax_m2",
-  "--reasoning-parser",
-  "minimax_m2",
-  "--gpu-memory-utilization",
-  "0.8",
-  "--max-model-len",
-  "196k",
-  "--max-num-seqs",
-  "16",
-  "--disable-custom-all-reduce",
-  "--kv-cache-dtype",
-  "fp8",
-]
-
-[tool.bentoml.build.args.metadata]
-description = "MiniMax M2.5"
-provider = "MiniMax"
-gpu_recommendation = "an Nvidia GPU with at least 80GB VRAM (e.g about 1 H100 GPU)."
-
-[tool.bentoml.build.args.hf_generation_config]
-temperature = 0.6
-top_p = 0.9
-repetition_penalty = 1.0
-
 [tool.ruff]
 extend-include = [
   "*.ipynb",
