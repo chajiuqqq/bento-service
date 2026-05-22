@@ -1,6 +1,6 @@
 [project]
-name = "qwen3-8b"
-version = "1.4.33"
+name = "vllm-bento"
+version = "0.0.1"
 description = "Self-host LLMs with vLLM and BentoML"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,6 +34,10 @@ Tracker = "https://github.com/bentoml/OpenLLM/issues"
 base_image = "vllm/vllm-openai:latest"
 dockerfile_template = "./docker/Dockerfile.template.j2"
 
+[tool.bentoml.build.python]
+requirements_txt = "./requirements.txt"
+index_url = "https://mirrors.aliyun.com/pypi/simple/"
+ 
 [tool.bentoml.build]
 service = "service.py:LLM"
 include = [

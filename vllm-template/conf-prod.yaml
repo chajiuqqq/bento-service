@@ -1,4 +1,4 @@
-name: minimax-m2-5
+name: minimax-m27
 model_id: MiniMaxAI/MiniMax-M2.7
 gpu_type: nvidia-h100-80gb
 tp: 4
@@ -24,7 +24,7 @@ cli_args:
   - --kv-cache-dtype
   - fp8
   - --kv-offloading-size
-  - "500"
+  - "100"
   - --disable-hybrid-kv-cache-manager
   - --enable-prompt-tokens-details
 metadata:
