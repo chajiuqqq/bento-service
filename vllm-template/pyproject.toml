@@ -35,7 +35,6 @@ base_image = "vllm/vllm-openai:latest"
 dockerfile_template = "./docker/Dockerfile.template.j2"
 
 [tool.bentoml.build.python]
-requirements_txt = "./requirements.txt"
 index_url = "https://mirrors.aliyun.com/pypi/simple/"
  
 [tool.bentoml.build]
