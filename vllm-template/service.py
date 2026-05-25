@@ -234,12 +234,13 @@ async def proxy(path: str, request: fastapi.Request):
 
     client = httpx.AsyncClient(timeout=None)
     try:
-        upstream_resp = await client.request(
+        req = client.build_request(
             method=request.method,
             url=upstream_url,
             headers=headers,
             content=body,
         )
+        upstream_resp = await client.send(req, stream=True)
     except Exception as e:
         _log_event('error', trace_id, error=str(e), elapsed_ms=round(
             (datetime.datetime.now(datetime.timezone.utc) - start).total_seconds() * 1000, 1))
