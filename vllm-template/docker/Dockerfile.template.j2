@@ -17,9 +17,10 @@ WORKDIR /app
 
 {% block SETUP_BENTO_COMPONENTS %}
 
+COPY --chown=root:root ./env/python/requirements.txt ./env/python/requirements.txt
+RUN python3 -m pip install -r ./env/python/requirements.txt --index-url https://mirrors.aliyun.com/pypi/simple/
 COPY --chown=root:root ./env/python ./env/python/
 COPY --chown=root:root . ./
-RUN python3 -m pip install --no-cache-dir -r ./env/python/requirements.txt --index-url https://mirrors.aliyun.com/pypi/simple/
 
 {% endblock %}
 
