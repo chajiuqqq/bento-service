@@ -25,7 +25,7 @@ Twitter = "https://twitter.com/bentomlai"
 Tracker = "https://github.com/bentoml/OpenLLM/issues"
 
 [tool.bentoml.build.docker]
-base_image = "vllm/vllm-openai:latest"
+base_image = "docker.m.daocloud.io/vllm/vllm-openai:cu130-nightly"
 dockerfile_template = "./docker/Dockerfile.template.j2"
 
 [tool.bentoml.build.python]
