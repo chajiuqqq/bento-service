@@ -6,14 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "bentoml==1.4.33",
-    "pyparsing>=3.1.1,<4",
-    "huggingface-hub",
-    "lmcache",
-    "kantoku",
-    "pyyaml",
+    "httpx",
     "fastapi",
-    "kernels",
-    "mistral_common[opencv]",
     "bento-sgl-router>=0.0.6",
 ]
 authors = [
