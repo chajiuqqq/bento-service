@@ -1,7 +1,7 @@
 import shutil
 import bentoml
 
-local_model_dir = '/data/Qwen3.6-35B-A3B'
+local_model_dir = '/data/Qwen3.6-35B-A3B-FP8'
 
 with bentoml.models.create(
     name='Qwen3.6-35B-A3B', # Name of the model in the Model Store
