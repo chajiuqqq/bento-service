@@ -1,0 +1,52 @@
+apiVersion: serving.yatai.ai/v2alpha1
+kind: BentoDeployment
+metadata:
+  name: qwen3
+  namespace: yatai
+spec:
+  bento: qwen3-0.8b
+  envs:
+  - name: NVIDIA_VISIBLE_DEVICES
+    value: all
+  - name: CUDA_VISIBLE_DEVICES
+    value: 4
+  # -- 替代 patch 的 runtimeClassName: nvidia --
+  extraPodSpec:
+    runtimeClassName: nvidia
+  # -- 替代 patch 的 livenessProbe（整体覆盖默认）--
+  livenessProbe:
+    httpGet:
+      path: /livez
+      port: http
+      scheme: HTTP
+    initialDelaySeconds: 10
+    timeoutSeconds: 120
+    periodSeconds: 10
+    successThreshold: 1
+    failureThreshold: 20
+  # -- 替代 patch 的 readinessProbe（整体覆盖默认）--
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http
+      scheme: HTTP
+    initialDelaySeconds: 5
+    timeoutSeconds: 120
+    periodSeconds: 10
+    successThreshold: 1
+    failureThreshold: 12
+  # -- 替代 patch 的 volumes / volumeMounts --
+  volumes:
+    - name: hf-models
+      hostPath:
+        path: /data
+  volumeMounts:
+    - name: hf-models
+      mountPath: /models
+  resources:
+    limits:
+      cpu: 8000m
+      memory: 32Gi
+    requests:
+      cpu: 4000m
+      memory: 16Gi

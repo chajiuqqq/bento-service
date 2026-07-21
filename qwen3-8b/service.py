@@ -56,7 +56,6 @@ bento_args = bentoml.use_arguments(BentoArgs)
     envs=bento_args.runtime_envs,
     traffic={"timeout": 300},
     endpoints={"readyz": "/health"},
-    workers=1,
 )
 class LLM:
 

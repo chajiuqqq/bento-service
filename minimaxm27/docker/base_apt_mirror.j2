@@ -1,9 +1,0 @@
-{% extends "base.j2" %}
-
-{% block SETUP_BENTO_COMPONENTS %}
-{% call common.RUN(__enable_buildkit__) -%} {% endcall -%}if [ -f /etc/apt/sources.list ]; then \
-    sed -i "s@http://.*archive.ubuntu.com@http://mirrors.aliyun.com@g" /etc/apt/sources.list; \
-    sed -i "s@http://.*security.ubuntu.com@http://mirrors.aliyun.com@g" /etc/apt/sources.list; \
-    fi
-{{ super() }}
-{% endblock %}

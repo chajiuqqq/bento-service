@@ -63,8 +63,9 @@ class LLM:
     def __command__(self) -> list[str]:
 
         return [
-            "vllm",
-            "serve",
+            'python3',
+            '-m',
+            'sglang.launch_server',
             "--served-model-name",
             bento_args.name,
             "--host",

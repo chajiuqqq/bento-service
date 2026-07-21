@@ -1,13 +1,19 @@
-name: minimax-m27
-model_id: MiniMaxAI/MiniMax-M2.7
-gpu_type: nvidia-h100-80gb
-tp: 4
-local_model_path: /models/MiniMax-M2.7
+# bento_args.yaml
+
+# ========== 基础配置 ==========
+name: "minimax-m27"
+engine_port: 8000
+
+# ========== vLLM 参数 ==========
 cli_args:
-  - --served-model-name
-  - MiniMaxAI/MiniMax-M2.7
+  - "--model"
+  - "/models/MiniMax-M2.7"
   - --trust-remote-code
   - --enable-auto-tool-choice
+  - "--tensor-parallel-size"
+  - "4"
+  - "--pipeline-parallel-size"
+  - "1"
   - --tool-call-parser
   - minimax_m2
   - --reasoning-parser
@@ -27,7 +33,3 @@ cli_args:
   - "100"
   - --disable-hybrid-kv-cache-manager
   - --enable-prompt-tokens-details
-metadata:
-  description: MiniMax M2.7
-  provider: MiniMax
-  gpu_recommendation: an Nvidia GPU with at least 80GB VRAM

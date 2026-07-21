@@ -1,0 +1,16 @@
+apiVersion: resources.yatai.ai/v1alpha1
+kind: BentoRequest
+metadata:
+  name: ${BENTO_NAME}
+  namespace: yatai
+spec:
+  bentoTag: ${BENTO_TAG}
+  ociRegistryInsecure: true
+  imageBuilderContainerResources:
+    requests:
+      cpu: "4"
+      memory: "16Gi"
+      ephemeral-storage: "50Gi"
+    limits:
+      cpu: "8"
+      memory: "32Gi"

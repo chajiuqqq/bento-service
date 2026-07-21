@@ -1,5 +1,5 @@
 [project]
-name = "minimax-m27"
+name = "qwen3-8b"
 version = "1.4.33"
 description = "Self-host LLMs with vLLM and BentoML"
 readme = "README.md"
@@ -35,7 +35,7 @@ requirements_txt = "./requirements.txt"
 index_url = "https://mirrors.aliyun.com/pypi/simple/"
 
 [tool.bentoml.build.docker]
-base_image= "registry.pintechs.com/cg-img-base/vllm/vllm-openai:minimax27"
+base_image= "registry.pintechs.com/cg-img-base/vllm/vllm-openai:v0.25.1"
 dockerfile_template= "./Dockerfile.template.j2"
 # system_packages=["build-essential"]
 
