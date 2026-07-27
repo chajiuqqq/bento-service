@@ -1,0 +1,13 @@
+bentoml==1.4.33
+# huggingface-hub
+# lmcache
+# kantoku
+# pyyaml
+fastapi
+httpx
+# bento-sgl-router>=0.0.6
+pyparsing>=3.1.1,<4
+# kernels
+# mistral_common[opencv]
+# bento-sgl-router>=0.0.6
+# safetensors>=0.4.5,<=0.7.0

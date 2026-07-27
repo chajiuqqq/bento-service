@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${BENTO_NAME}-bento-builder
+  namespace: yatai
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bento-builder
+          image: registry.pintechs.com/cg-img-base/python:3.12-slim
+          command:
+            - /bin/bash
+            - -c
+            - |
+              cd /workdir && uv pip install -r requirements.txt --index https://mirrors.aliyun.com/pypi/simple/
+              bentoml build --arg-file bento_args.yaml --name $BENTO_NAME --version $BENTO_VERSION
+              bentoml push $BENTO_NAME:$BENTO_VERSION
+          env:
+            - name: BENTO_NAME
+              value: ${BENTO_NAME}
+            - name: BENTO_VERSION
+              value: ${BENTO_VERSION}
+          envFrom:
+            - configMapRef:
+                name: bento-config
+          volumeMounts:
+            - name: workdir
+              mountPath: /workdir
+      volumes:
+        - name: workdir
+          hostPath:
+            path: ${HOST_BENTO_PATH}
+            type: Directory

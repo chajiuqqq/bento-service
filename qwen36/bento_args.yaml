@@ -1,0 +1,18 @@
+# bento_args.yaml - vLLM 参数配置
+
+# ========== 基础配置 ==========
+name: "qwen36"
+engine_port: 8000
+
+# ========== vLLM 参数 ==========
+cli_args:
+  - "--model"
+  - "/models/Qwen3.6-35B-A3B"
+  - "--trust-remote-code"
+  - "--reasoning-parser"
+  - "qwen3"
+  - "--tool-call-parser"
+  - "qwen3_coder"
+  - "--enable-auto-tool-choice"
+  - "--speculative-config"
+  - '{"method":"qwen3_next_mtp","num_speculative_tokens":2}'
