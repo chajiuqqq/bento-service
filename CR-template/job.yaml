@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ${BENTO_NAME}-bento-builder
+  name: ${BENTO_NAME}-${BENTO_VERSION}-bento-builder
   namespace: yatai
 spec:
   backoffLimit: 1
@@ -15,9 +15,27 @@ spec:
             - /bin/bash
             - -c
             - |
-              cd /workdir && uv pip install -r requirements.txt --index https://mirrors.aliyun.com/pypi/simple/
-              bentoml build --arg-file bento_args.yaml --name $BENTO_NAME --version $BENTO_VERSION
-              bentoml push $BENTO_NAME:$BENTO_VERSION
+              # 任何一步失败立即以非零码退出，Pod 标记 Failed，交给 backoffLimit 做 Pod 级重试
+              set -euo pipefail
+
+              echo "=== [1/3] 安装依赖 ==="
+              cd /workdir
+              uv pip install --system -r requirements.txt --index https://mirrors.aliyun.com/pypi/simple/
+
+              echo "=== [2/3] 构建 bento ==="
+              if [[ ! -f bento_args.yaml ]]; then
+                echo "错误: bento_args.yaml 不存在，ConfigMap bento-args-$BENTO_NAME-$BENTO_VERSION 是否已创建？" >&2
+                exit 1
+              fi
+              bentoml build --arg-file bento_args.yaml --name "$BENTO_NAME" --version "$BENTO_VERSION"
+
+              echo "=== [3/3] 推送 bento ==="
+              # push 是网络操作最易抖动；就地重试一次，避免 Pod 级重试重跑整个 build
+              if ! bentoml push "$BENTO_NAME:$BENTO_VERSION"; then
+                echo "push 失败，15s 后重试一次..." >&2
+                sleep 15
+                bentoml push "$BENTO_NAME:$BENTO_VERSION"
+              fi
           env:
             - name: BENTO_NAME
               value: ${BENTO_NAME}
@@ -29,8 +47,15 @@ spec:
           volumeMounts:
             - name: workdir
               mountPath: /workdir
+            - name: bento-args
+              mountPath: /workdir/bento_args.yaml
+              subPath: bento_args.yaml
       volumes:
         - name: workdir
           hostPath:
             path: ${HOST_BENTO_PATH}
             type: Directory
+        # bento_args.yaml 由业务系统动态生成，按构建创建 ConfigMap 后挂入
+        - name: bento-args
+          configMap:
+            name: bento-args-${BENTO_NAME}-${BENTO_VERSION}

@@ -44,9 +44,6 @@ spec:
     - name: hf-models
       mountPath: /models
   resources:
-    limits:
-      cpu: 8000m
-      memory: 32Gi
     requests:
-      cpu: 4000m
-      memory: 16Gi
+      cpu: ${RES_CPU:-4}
+      memory: ${RES_MEM:-16Gi}

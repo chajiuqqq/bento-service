@@ -4,7 +4,7 @@ metadata:
   name: qwen3-0.8b
   namespace: yatai
 spec:
-  bentoTag: qwen3:kcq53subv6zoutzc
+  bentoTag: qwen3-0.8b:latest
   ociRegistryInsecure: true
   imageBuilderContainerResources:
     requests:
