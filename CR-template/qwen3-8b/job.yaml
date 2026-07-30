@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ${BENTO_NAME}-${BENTO_VERSION}-bento-builder
+  name: qwen3-8b-latest-bento-builder
   namespace: yatai
 spec:
   backoffLimit: 1
@@ -10,7 +10,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: bento-builder
-          image: registry.pintechs.com/cg-img-base/astral/uv:python3.12-bookworm-slim
+          image: registry.pintechs.com/cg-img-base/python:3.12-slim
           command:
             - /bin/bash
             - -c
@@ -24,23 +24,23 @@ spec:
 
               echo "=== [2/3] 构建 bento ==="
               if [[ ! -f bento_args.yaml ]]; then
-                echo "错误: bento_args.yaml 不存在，ConfigMap bento-args-$BENTO_NAME-$BENTO_VERSION 是否已创建？" >&2
+                echo "错误: bento_args.yaml 不存在，ConfigMap bento-args-qwen3-8b-latest 是否已创建？" >&2
                 exit 1
               fi
-              bentoml build --arg-file bento_args.yaml --name "$BENTO_NAME" --version "$BENTO_VERSION"
+              bentoml build --arg-file bento_args.yaml --name "qwen3-8b" --version "latest"
 
               echo "=== [3/3] 推送 bento ==="
               # push 是网络操作最易抖动；就地重试一次，避免 Pod 级重试重跑整个 build
-              if ! bentoml push "$BENTO_NAME:$BENTO_VERSION"; then
+              if ! bentoml push "qwen3-8b:latest"; then
                 echo "push 失败，15s 后重试一次..." >&2
                 sleep 15
-                bentoml push "$BENTO_NAME:$BENTO_VERSION"
+                bentoml push "qwen3-8b:latest"
               fi
           env:
             - name: BENTO_NAME
-              value: ${BENTO_NAME}
+              value: qwen3-8b
             - name: BENTO_VERSION
-              value: ${BENTO_VERSION}
+              value: latest
           envFrom:
             - configMapRef:
                 name: bento-config
@@ -53,9 +53,9 @@ spec:
       volumes:
         - name: workdir
           hostPath:
-            path: ${HOST_BENTO_PATH}
+            path: /Work/bento-service/qwen3-8b
             type: Directory
         # bento_args.yaml 由业务系统动态生成，按构建创建 ConfigMap 后挂入
         - name: bento-args
           configMap:
-            name: bento-args-${BENTO_NAME}-${BENTO_VERSION}
+            name: bento-args-qwen3-8b-latest

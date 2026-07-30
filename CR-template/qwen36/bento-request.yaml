@@ -1,0 +1,16 @@
+apiVersion: resources.yatai.ai/v1alpha1
+kind: BentoRequest
+metadata:
+  name: qwen36
+  namespace: yatai
+spec:
+  bentoTag: qwen36:20260730-1114-abcd
+  ociRegistryInsecure: true
+  imageBuilderContainerResources:
+    requests:
+      cpu: "4"
+      memory: "16Gi"
+      ephemeral-storage: "50Gi"
+    limits:
+      cpu: "8"
+      memory: "32Gi"

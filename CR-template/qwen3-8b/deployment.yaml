@@ -4,7 +4,7 @@ metadata:
   name: qwen3
   namespace: yatai
 spec:
-  bento: qwen3-0.8b
+  bento: qwen3-8b
   envs:
   - name: NVIDIA_VISIBLE_DEVICES
     value: all
