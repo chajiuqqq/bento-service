@@ -4,7 +4,7 @@ metadata:
   name: qwen36
   namespace: bento-dev
 spec:
-  bentoTag: qwen36:20260805-1449-abcd
+  bentoTag: qwen36:20260805-1624-abcd
   ociRegistryInsecure: true
   imageBuilderContainerResources:
     requests:
