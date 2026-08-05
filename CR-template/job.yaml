@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: ${BENTO_NAME}-${BENTO_VERSION}-bento-builder
-  namespace: yatai
+  namespace: ${BENTO_NAMESPACE:-yatai}
 spec:
   backoffLimit: 1
   template:
@@ -43,7 +43,7 @@ spec:
               value: ${BENTO_VERSION}
           envFrom:
             - configMapRef:
-                name: bento-config
+                name: yatai-cloud-config
           volumeMounts:
             - name: workdir
               mountPath: /workdir

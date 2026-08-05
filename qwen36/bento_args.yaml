@@ -16,3 +16,5 @@ cli_args:
   - "--enable-auto-tool-choice"
   - "--speculative-config"
   - '{"method":"qwen3_next_mtp","num_speculative_tokens":2}'
+  - --max-num-seqs
+  - "32"

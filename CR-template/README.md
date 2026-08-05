@@ -3,7 +3,10 @@
 先生成 ConfigMap：
 
 ```bash
-kubectl -n yatai create configmap bento-args-${BENTO_NAME}-${BENTO_VERSION} \
+export BENTO_NAMESPACE="bento-test"
+export BENTO_NAME="bento-test"
+export BENTO_VERSION="v1.0.0"
+kubectl -n ${BENTO_NAMESPACE} create configmap bento-args-${BENTO_NAME}-${BENTO_VERSION} \
   --from-file=bento_args.yaml=/path/to/generated/bento_args.yaml
 ```
 

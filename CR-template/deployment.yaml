@@ -1,15 +1,15 @@
 apiVersion: serving.yatai.ai/v2alpha1
 kind: BentoDeployment
 metadata:
-  name: qwen3
-  namespace: yatai
+  name: ${BENTO_NAME}
+  namespace: ${BENTO_NAMESPACE:-yatai}
 spec:
   bento: ${BENTO_NAME}
   envs:
   - name: NVIDIA_VISIBLE_DEVICES
     value: all
   - name: CUDA_VISIBLE_DEVICES
-    value: ${CUDA_VISIBLE_DEVICES}
+    value: '${CUDA_VISIBLE_DEVICES}'
   # -- 替代 patch 的 runtimeClassName: nvidia --
   extraPodSpec:
     runtimeClassName: nvidia
@@ -45,5 +45,8 @@ spec:
       mountPath: /models
   resources:
     requests:
-      cpu: ${RES_CPU:-4}
+      cpu: '${RES_CPU:-4}'
+      memory: ${RES_MEM:-16Gi}
+    limits:
+      cpu: '${RES_CPU:-4}'
       memory: ${RES_MEM:-16Gi}

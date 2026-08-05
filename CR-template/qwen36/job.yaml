@@ -1,8 +1,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: qwen36-20260730-1114-abcd-bento-builder
-  namespace: yatai
+  name: qwen36-20260805-1449-abcd-bento-builder
+  namespace: bento-dev
 spec:
   backoffLimit: 1
   template:
@@ -24,26 +24,26 @@ spec:
 
               echo "=== [2/3] 构建 bento ==="
               if [[ ! -f bento_args.yaml ]]; then
-                echo "错误: bento_args.yaml 不存在，ConfigMap bento-args-qwen36-20260730-1114-abcd 是否已创建？" >&2
+                echo "错误: bento_args.yaml 不存在，ConfigMap bento-args-qwen36-20260805-1449-abcd 是否已创建？" >&2
                 exit 1
               fi
-              bentoml build --arg-file bento_args.yaml --name "qwen36" --version "20260730-1114-abcd"
+              bentoml build --arg-file bento_args.yaml --name "qwen36" --version "20260805-1449-abcd"
 
               echo "=== [3/3] 推送 bento ==="
               # push 是网络操作最易抖动；就地重试一次，避免 Pod 级重试重跑整个 build
-              if ! bentoml push "qwen36:20260730-1114-abcd"; then
+              if ! bentoml push "qwen36:20260805-1449-abcd"; then
                 echo "push 失败，15s 后重试一次..." >&2
                 sleep 15
-                bentoml push "qwen36:20260730-1114-abcd"
+                bentoml push "qwen36:20260805-1449-abcd"
               fi
           env:
             - name: BENTO_NAME
               value: qwen36
             - name: BENTO_VERSION
-              value: 20260730-1114-abcd
+              value: 20260805-1449-abcd
           envFrom:
             - configMapRef:
-                name: bento-config
+                name: yatai-cloud-config
           volumeMounts:
             - name: workdir
               mountPath: /workdir
@@ -58,4 +58,4 @@ spec:
         # bento_args.yaml 由业务系统动态生成，按构建创建 ConfigMap 后挂入
         - name: bento-args
           configMap:
-            name: bento-args-qwen36-20260730-1114-abcd
+            name: bento-args-qwen36-20260805-1449-abcd

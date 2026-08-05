@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: bento-config
-  namespace: yatai
+  name: yatai-cloud-config
+  namespace: ${BENTO_NAMESPACE:-yatai}
 data:
   BENTO_CLOUD_API_ENDPOINT: ${BENTO_CLOUD_API_ENDPOINT}
   BENTO_CLOUD_API_KEY: ${BENTO_CLOUD_API_KEY}

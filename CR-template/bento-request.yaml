@@ -2,9 +2,9 @@ apiVersion: resources.yatai.ai/v1alpha1
 kind: BentoRequest
 metadata:
   name: ${BENTO_NAME}
-  namespace: yatai
+  namespace: ${BENTO_NAMESPACE:-yatai}
 spec:
-  bentoTag: ${BENTO_NAME}:${BENTO_VERSION }
+  bentoTag: ${BENTO_NAME}:${BENTO_VERSION}
   ociRegistryInsecure: true
   imageBuilderContainerResources:
     requests:

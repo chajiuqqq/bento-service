@@ -2,9 +2,9 @@ apiVersion: resources.yatai.ai/v1alpha1
 kind: BentoRequest
 metadata:
   name: qwen36
-  namespace: yatai
+  namespace: bento-dev
 spec:
-  bentoTag: qwen36:20260730-1114-abcd
+  bentoTag: qwen36:20260805-1449-abcd
   ociRegistryInsecure: true
   imageBuilderContainerResources:
     requests:
