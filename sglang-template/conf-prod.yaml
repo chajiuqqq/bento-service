@@ -1,16 +1,8 @@
 name: MiniMax-M2.7-NVFP4
-model_id: MiniMax-M2.7-NVFP4
-local_model_path: /models/MiniMax-M2.7-NVFP4
-gpu_type: nvidia-h100-80gb
-tp: 2
-log_openai_bodies: false
-max_session_len: 120000
-mem_fraction_static: 0.85
+engine_port: 8000
 cli_args:
   -  --model-path
   - /models/MiniMax-M2.7-NVFP4
-  - --served-model-name
-  - MiniMax-M2.7
   - --reasoning-parser
   - minimax
   - --tool-call-parser

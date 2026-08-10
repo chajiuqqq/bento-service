@@ -17,9 +17,16 @@ WORKDIR /app
 
 {% block SETUP_BENTO_COMPONENTS %}
 
+# Block SETUP_BENTO_COMPONENTS
+COPY --chown=root:root ./env/python/requirements.txt ./env/python/requirements.txt
+
+# mount=type=cache 让 pip 缓存持久化（跨 build 复用）
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install -r ./env/python/requirements.txt \
+    --index-url https://mirrors.aliyun.com/pypi/simple/
+
 COPY --chown=root:root ./env/python ./env/python/
 COPY --chown=root:root . ./
-RUN python3 -m pip install --no-cache-dir -r ./env/python/requirements.txt
 
 {% endblock %}
 

@@ -18,11 +18,55 @@ spec:
               # 任何一步失败立即以非零码退出，Pod 标记 Failed，交给 backoffLimit 做 Pod 级重试
               set -euo pipefail
 
-              echo "=== [1/4] 安装依赖 ==="
+              echo "=== [1/5] 从 S3 下载并解压项目 ==="
+              uv pip install --system boto3
+              python3 - <<'PYEOF'
+import os
+from boto3 import client
+from botocore.config import Config
+
+s3 = client(
+    "s3",
+    endpoint_url=os.environ["S3_ENDPOINT"],
+    aws_access_key_id=os.environ["S3_ACCESS_KEY"],
+    aws_secret_access_key=os.environ["S3_SECRET_KEY"],
+    config=Config(s3={"addressing_style": "path"}),
+)
+s3.download_file(
+    os.environ["S3_BUCKET"], os.environ["S3_KEY"], "/workdir/bento-service.zip"
+)
+print("已下载: /workdir/bento-service.zip")
+PYEOF
+              cd /workdir
+              python3 - <<'PYEOF'
+import os
+import shutil
+import zipfile
+
+zip_path = "/workdir/bento-service.zip"
+src = "/workdir/src_tmp"
+os.makedirs(src, exist_ok=True)
+with zipfile.ZipFile(zip_path) as zf:
+    zf.extractall(src)
+# 若 zip 只含单层顶层目录（如 bento-service/），展开为项目根
+entries = os.listdir(src)
+if len(entries) == 1 and os.path.isdir(os.path.join(src, entries[0])):
+    src = os.path.join(src, entries[0])
+# 拷入 /workdir，跳过 bento_args.yaml（由 ConfigMap 挂载提供，不可被覆盖）
+for name in os.listdir(src):
+    if name == "bento_args.yaml":
+        continue
+    shutil.move(os.path.join(src, name), os.path.join("/workdir", name))
+shutil.rmtree("/workdir/src_tmp", ignore_errors=True)
+os.remove(zip_path)
+print("项目已就绪于 /workdir")
+PYEOF
+
+              echo "=== [2/5] 安装依赖 ==="
               cd /workdir
               uv pip install --system -r requirements.txt --index https://mirrors.aliyun.com/pypi/simple/
 
-              echo "=== [2/4] 应用 base_image 到 pyproject.toml ==="
+              echo "=== [3/5] 应用 base_image 到 pyproject.toml ==="
               if [[ -n "${BENTO_BASE_IMAGE:-}" ]]; then
                 python3 - <<'PYEOF'
 import os
@@ -53,14 +97,14 @@ PYEOF
                 echo "BENTO_BASE_IMAGE 未设置，使用 pyproject.toml 中的默认 base_image"
               fi
 
-              echo "=== [3/4] 构建 bento ==="
+              echo "=== [4/5] 构建 bento ==="
               if [[ ! -f bento_args.yaml ]]; then
                 echo "错误: bento_args.yaml 不存在，ConfigMap bento-args-$BENTO_NAME-$BENTO_VERSION 是否已创建？" >&2
                 exit 1
               fi
               bentoml build --arg-file bento_args.yaml --name "$BENTO_NAME" --version "$BENTO_VERSION"
 
-              echo "=== [4/4] 推送 bento ==="
+              echo "=== [5/5] 推送 bento ==="
               # push 是网络操作最易抖动；就地重试一次，避免 Pod 级重试重跑整个 build
               if ! bentoml push "$BENTO_NAME:$BENTO_VERSION"; then
                 echo "push 失败，15s 后重试一次..." >&2
@@ -74,10 +118,22 @@ PYEOF
               value: ${BENTO_VERSION}
             - name: BENTO_BASE_IMAGE
               value: ${BENTO_BASE_IMAGE}
+            # ===== S3 下载项目（S3 兼容存储，如 MinIO）=====
+            - name: S3_ENDPOINT
+              value: ${S3_ENDPOINT}
+            - name: S3_BUCKET
+              value: ${S3_BUCKET}
+            - name: S3_KEY
+              value: ${S3_KEY}
+            - name: S3_ACCESS_KEY
+              value: ${S3_ACCESS_KEY}
+            - name: S3_SECRET_KEY
+              value: ${S3_SECRET_KEY}
           envFrom:
             - configMapRef:
                 name: yatai-cloud-config
           volumeMounts:
+            # 构建工作目录：emptyDir，每次 Job 全新，可安全修改 pyproject.toml
             - name: workdir
               mountPath: /workdir
             - name: bento-args
@@ -85,9 +141,7 @@ PYEOF
               subPath: bento_args.yaml
       volumes:
         - name: workdir
-          hostPath:
-            path: ${HOST_BENTO_PATH}
-            type: Directory
+          emptyDir: {}
         # bento_args.yaml 由业务系统动态生成，按构建创建 ConfigMap 后挂入
         - name: bento-args
           configMap:

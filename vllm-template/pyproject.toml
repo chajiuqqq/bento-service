@@ -1,16 +1,9 @@
 [project]
-name = "vllm-bento"
-version = "0.0.1"
+name = "qwen3-8b"
+version = "1.4.33"
 description = "Self-host LLMs with vLLM and BentoML"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "bentoml==1.4.33",
-    "httpx",
-    "fastapi",
-    "bento-sgl-router>=0.0.6",
-    "pyparsing>=3.1.1,<4",
-]
 authors = [
   { name = "BentoML Team", email = "contact@bentoml.com" },
 ]
@@ -25,13 +18,7 @@ GitHub = "https://github.com/bentoml/OpenLLM"
 Twitter = "https://twitter.com/bentomlai"
 Tracker = "https://github.com/bentoml/OpenLLM/issues"
 
-[tool.bentoml.build.docker]
-base_image = "docker.m.daocloud.io/vllm/vllm-openai:cu130-nightly"
-dockerfile_template = "./docker/Dockerfile.template.j2"
-
-[tool.bentoml.build.python]
-index_url = "https://mirrors.aliyun.com/pypi/simple/"
- 
+# ========== BentoML 构建配置 ==========
 [tool.bentoml.build]
 service = "service.py:LLM"
 include = [
@@ -39,9 +26,21 @@ include = [
   "*.toml",
   "*.txt",
   "*.md",
+  "*.j2",
   "templates/*",
 ]
 
+[tool.bentoml.build.python]
+requirements_txt = "./requirements.txt"
+index_url = "https://mirrors.aliyun.com/pypi/simple/"
+
+[tool.bentoml.build.docker]
+base_image= "registry.pintechs.com/cg-img-base/vllm/vllm-openai:v0.25.1"
+dockerfile_template= "./Dockerfile.template.j2"
+# system_packages=["build-essential"]
+
+
+# ========== 代码格式化配置 ==========
 [tool.ruff]
 extend-include = [
   "*.ipynb",
