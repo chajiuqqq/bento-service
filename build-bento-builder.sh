@@ -1,0 +1,1 @@
+docker build -t bento-builder:v1.0.0 -f CR-template/Dockerfile.bento-builder .

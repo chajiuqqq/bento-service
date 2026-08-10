@@ -1,0 +1,3 @@
+FROM registry.pintechs.com/cg-img-base/astral/uv:python3.12-bookworm-slim
+
+COPY ./ /workdir/
