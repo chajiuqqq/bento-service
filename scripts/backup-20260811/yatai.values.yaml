@@ -1,0 +1,15 @@
+USER-SUPPLIED VALUES:
+postgresql:
+  database: yatai
+  host: my-postgres-postgresql
+  password: admin
+  port: 5432
+  sslmode: disable
+  user: admin
+s3:
+  accessKey: minioadmin
+  bucketName: yatai
+  endpoint: https://s3.pintechs.com
+  region: us-east-1
+  secretKey: minioadmin
+  secure: false

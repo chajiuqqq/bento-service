@@ -1,0 +1,8 @@
+USER-SUPPLIED VALUES:
+bentoDeploymentAllNamespaces: true
+image:
+  repository: cgllm/yatai-deployment-controller
+  tag: latest
+imagePullSecrets:
+- name: harbor-credentials
+registry: registry.pintechs.com

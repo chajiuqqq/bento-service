@@ -1,0 +1,36 @@
+USER-SUPPLIED VALUES:
+bentoImageBuildEngine: buildkit-rootless
+dockerRegistry:
+  bentoRepositoryName: cgllm/yatai-bentos
+  password: AAss1234
+  secure: false
+  server: registry.pintechs.com
+  username: caijiachen
+global:
+  caCertSecret: registry-ca-secret
+  caCertSecretKey: ca.crt
+  deploymentNamespaces:
+  - yatai
+  - yatai-system
+  monitorAllNamespaces: true
+  s3:
+    accessKeyId: minioadmin
+    bucketName: yatai
+    endpoint: http://s3.pintechs.com
+    region: us-east-1
+    secretAccessKey: minioadmin
+    secure: false
+image:
+  pullPolicy: Always
+  repository: cgllm/yatai-image-builder
+  tag: dev
+imagePullSecrets:
+- name: harbor-credentials
+internal:
+  skipCheck: true
+internalImages:
+  buildkit: registry.pintechs.com/cgllm/buildkit:v0.31.2-rootless
+  buildkitRootless: registry.pintechs.com/cgllm/buildkit:v0.31.2-rootless
+registry: registry.pintechs.com
+yatai:
+  endpoint: http://yatai.yatai-system.svc.cluster.local
