@@ -11,3 +11,4 @@ cli_args:
   - "--trust-remote-code"
   - "--gpu-memory-utilization"
   - "0.5"
+  - "--enable-force-include-usage"

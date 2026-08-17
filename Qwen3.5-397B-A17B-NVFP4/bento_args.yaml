@@ -46,6 +46,7 @@ cli_args:
   - "6"
   - "--mamba-scheduler-strategy"
   - "extra_buffer"
-  - "--enable-cache-report"
   - "--limit-mm-data-per-request"
   - '{"image":1}'
+  - "--enable-cache-report"
+  - "--stream-response-default-include-usage"

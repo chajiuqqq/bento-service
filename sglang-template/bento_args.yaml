@@ -6,3 +6,5 @@ cli_args:
   - "--model"
   - "/models/MiniMax-M2.7-NVFP4"
   - "--trust-remote-code"
+  - "--enable-cache-report"
+  - "--stream-response-default-include-usage"

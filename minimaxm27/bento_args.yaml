@@ -27,9 +27,5 @@ cli_args:
   - --max-num-seqs
   - "32"
   - --disable-custom-all-reduce
-  - --kv-cache-dtype
-  - fp8
-  - --kv-offloading-size
-  - "100"
-  - --disable-hybrid-kv-cache-manager
   - --enable-prompt-tokens-details
+  - --enable-force-include-usage
