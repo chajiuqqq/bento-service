@@ -3,12 +3,6 @@ name = "bentosglang"
 version = "0.1.0"
 description = "Self-host LLMs with SGLang and BentoML"
 requires-python = ">=3.12.0"
-dependencies = [
-    "bentoml==1.4.33",
-    "fastapi>=0.100",
-    "httpx>=0.25",
-    "pydantic>=2.0",
-]
 
 [tool.bentoml.build]
 service = "service.py:SGL"
@@ -20,6 +14,10 @@ include = [
   "*.yaml",
 ]
 
+[tool.bentoml.build.python]
+requirements_txt = "./requirements.txt"
+index_url = "https://mirrors.aliyun.com/pypi/simple/"
+
 [tool.bentoml.build.docker]
-base_image = "voipmonitor/sglang:cu130-fix"
-dockerfile_template = "./docker/Dockerfile.template.j2"
+base_image = "lmsysorg/sglang:v0.5.17"
+dockerfile_template= "./Dockerfile.template.j2"

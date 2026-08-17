@@ -61,7 +61,7 @@ bento_args = bentoml.use_arguments(BentoArgs)
 class SGL:
 
     def __command__(self) -> list[str]:
-    return [
+        return [
           'python3',
           '-m',
           'sglang.launch_server',

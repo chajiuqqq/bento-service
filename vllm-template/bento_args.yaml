@@ -1,15 +1,13 @@
 # bento_args.yaml - vLLM 参数配置
 
 # ========== 基础配置 ==========
-name: "qwen3-0.8b"
+name: "qwen3-embed-4b"
 engine_port: 8000
 
 # ========== vLLM 参数 ==========
 cli_args:
   - "--model"
-  - "/models/Qwen3.5-0.8B"
+  - "/models/Qwen3-Embedding-4B"
   - "--trust-remote-code"
-  - "--reasoning-parser"
-  - "qwen3"
-  - "--tool-call-parser"
-  - "qwen3_coder"
+  - "--gpu-memory-utilization"
+  - "0.5"

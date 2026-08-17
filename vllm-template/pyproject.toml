@@ -35,7 +35,7 @@ requirements_txt = "./requirements.txt"
 index_url = "https://mirrors.aliyun.com/pypi/simple/"
 
 [tool.bentoml.build.docker]
-base_image= "registry.pintechs.com/cg-img-base/vllm/vllm-openai:v0.25.1"
+base_image= "vllm/vllm-openai:v0.27.0"
 dockerfile_template= "./Dockerfile.template.j2"
 # system_packages=["build-essential"]
 
