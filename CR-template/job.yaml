@@ -10,7 +10,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: bento-builder
-          image: registry.pintechs.com/cgllm/bento-builder:v1.0.0
+          image: registry.pintechs.com/cgllm/bento-builder:v1.0.1
           command:
             - /bin/bash
             - -c
