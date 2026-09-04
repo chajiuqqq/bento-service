@@ -9,13 +9,13 @@ cli_args:
   - "--model"
   - "/models/MiniMax-M2.7"
   - --trust-remote-code
-  - --enable-auto-tool-choice
+  # - --enable-auto-tool-choice
   - "--tensor-parallel-size"
   - "4"
   - "--pipeline-parallel-size"
   - "1"
-  - --tool-call-parser
-  - minimax_m2
+  # - --tool-call-parser
+  # - minimax_m2
   - --reasoning-parser
   - minimax_m2
   - --gpu-memory-utilization
@@ -29,3 +29,4 @@ cli_args:
   - --disable-custom-all-reduce
   - --enable-prompt-tokens-details
   - --enable-force-include-usage
+  - --enable-prefix-caching

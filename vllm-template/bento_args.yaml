@@ -9,6 +9,6 @@ cli_args:
   - "--model"
   - "/models/Qwen3-Embedding-4B"
   - "--trust-remote-code"
-  - "--gpu-memory-utilization"
-  - "0.5"
-  - "--enable-force-include-usage"
+  - --enable-prompt-tokens-details
+  - --enable-force-include-usage
+  - --enable-prefix-caching
