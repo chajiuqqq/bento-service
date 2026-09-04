@@ -11,9 +11,6 @@ cli_args:
   - "--trust-remote-code"
   - "--reasoning-parser"
   - "qwen3"
-  # - "--tool-call-parser"
-  # - "qwen3_coder"
-  # - "--enable-auto-tool-choice"
   - "--speculative-config"
   - '{"method":"qwen3_next_mtp","num_speculative_tokens":2}'
   - --max-num-seqs

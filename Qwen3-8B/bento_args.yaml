@@ -11,8 +11,6 @@ cli_args:
   - "--trust-remote-code"
   - "--reasoning-parser"
   - "qwen3"
-  # - "--tool-call-parser"
-  # - "qwen3_coder"
   - --enable-prompt-tokens-details
   - --enable-force-include-usage
   - --enable-prefix-caching
